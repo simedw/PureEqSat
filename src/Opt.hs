@@ -10,6 +10,7 @@ module Opt
     , union      -- :: EqRepr       -> EqRepr m -> m (EqRepr m)
     , getElems   -- :: EqRepr                   -> m [EqElem m]
     , getClass   -- :: Eq (EqElem m) => EqElem m -> m (Maybe (EqRepr m))
+    , getClasses
     , runOpt -- :: m a -> a
     , addRule
     , addRules
@@ -51,6 +52,8 @@ equivalent x y = lift (D.equivalent x y)
 union x y = lift (D.union x y)
 getElems x = lift (D.getElems x) 
 getClass x = lift (D.getClass x)
+getClasses :: OptMonad eqElem [D.EqRepr]
+getClasses = lift D.getClasses
 
 addRule  :: D.EqRepr -> Rule s -> OptMonad s ()
 addRule rep rule = do 

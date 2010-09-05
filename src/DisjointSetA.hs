@@ -6,6 +6,7 @@ module DisjointSetA
     , union      -- :: EqRepr       -> EqRepr m -> m (EqRepr m)
     , getElems   -- :: EqRepr                   -> m [EqElem m]
     , getClass   -- :: Eq (EqElem m) => EqElem m -> m (Maybe (EqRepr m))
+    , getClasses -- :: m [EqRepr]
     , runEqClass -- :: m a -> a
     ) where
 
