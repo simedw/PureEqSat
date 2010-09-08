@@ -27,7 +27,7 @@ import Data.Maybe
  -}
 
 
-newtype ListSet s a = LS { runLS :: State (LState s) a }
+newtype ListSet s a = LS { runLS :: StateT (LState s) IO a }
     deriving (MonadState (LState s), Monad)
 
 data LState s = LState
@@ -82,7 +82,7 @@ union x y | x == y    = return x
     cls <- gets classes
     let c1 = cls .! x
         c2 = cls .! y
-        m  = max x y
+        m  = min x y
     modify $ \s -> s { classes = M.insert m (Right $ c1 `S.union` c2) 
                                           (M.insert x (Left m) 
                                           (M.insert y (Left m) cls)) }
@@ -112,8 +112,8 @@ getClass z = do
     return $ listToMaybe $ map snd $ filter (\(xs, x) -> z `elem` xs) c' 
 -}
 
-runEqClass m = evalState (runLS m) $ LState { classes = M.empty, number = 0 }
+runEqClass m = evalStateT (runLS m) $ LState { classes = M.empty, number = 0 }
 
 
 getClasses :: ListSet eqElem [EqRepr]
-getClasses = liftM (map fst . M.toList)  $ gets classes
+getClasses = liftM (\m -> [x | (x, Right _) <- M.toList m])  $ gets classes

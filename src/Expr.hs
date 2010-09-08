@@ -4,7 +4,8 @@
 {-# LANGUAGE TypeOperators #-}
 module Expr where
 
-import Opt
+import Opt hiding (EqRepr)
+import qualified Opt as Opt
 import Debug.Trace
 import Data.Maybe
 import Data.List (groupBy,sort)
@@ -26,70 +27,54 @@ x *. y = In (Mul x y)
 newtype Fix f = In { out :: f (Fix f) }
 type Expr = Fix TExpr
 
--- pattern (EAdd x y) = Add (In x) (In y)
+newtype EqExpr = EqExpr (TExpr (Opt.EqRepr EqExpr))
 
-type Opt = OptMonad (TExpr EqRepr)
+instance Ord EqExpr where
+    compare (EqExpr x) (EqExpr y) = compare x y 
+
+instance Eq EqExpr where
+    (EqExpr x) == (EqExpr y) = x == y
+
+type EqRepr = Opt.EqRepr EqExpr 
+
+type Opt = OptMonad EqExpr
 
 addExpr :: Expr -> Opt EqRepr
-addExpr (In (Lit i)) = addTerm (Lit i)
-addExpr (In (Var x)) = addTerm (Var x)
+addExpr (In (Lit i)) = addTerm (EqExpr $ Lit i)
+addExpr (In (Var x)) = addTerm (EqExpr $ Var x)
 addExpr (In (Add x y)) = do
     x' <- addExpr x
     y' <- addExpr y
-    c <- addTerm (Add x' y')
---    trace (show c) $ addRule c comm -- kanske ska ha den i flip i opt?
+    c <- addTerm (EqExpr $ Add x' y')
     return c
 addExpr (In (Mul x y)) = do
     x' <- addExpr x
     y' <- addExpr y
-    addTerm (Mul x' y')
+    addTerm (EqExpr $ Mul x' y')
 
-addTerm :: TExpr EqRepr -> Opt EqRepr
-addTerm x = do
-    r <- getClass x
+addTerm :: EqExpr -> Opt EqRepr
+{-addTerm t@(Add p1 p2) = do
+    r <- getClass t
     case r of
-        Nothing  -> makeClass x
-        Just rep -> return rep
-
-{-
-assoc :: Rule (TExpr EqRepr)
-assoc = Rule (Name "assoc") $ \ cls eqElem -> do
-    case eqElem of
-        Add x y -> do
-            xs <- getClass x
-            
-            undefined
-            -- hmm gå igenom och leta Add noder? bada hoger och vanster? tror vi får båda via commutative
-            -- . Men om det inte finns i hoger och vi kolla till vanster... om ordningen ar fel pa reglerna
-        _ -> return Failed
+        Nothing -> do classes <- getClasses
+                      eqs <- forM classes $ \c -> do
+                        terms <- getElems c
+                        liftM concat $ forM terms $ \term -> 
+                            case term of
+                                Add q1 q2 -> do b <- liftM2 (&&) (equivalent p1 q1) (equivalent p2 q2)
+                                                if b then return [c] else return []
+                                _         -> return []
+                      case concat eqs of
+                        []    -> makeClass t
+                        (x:xs) -> foldM union x xs--return x
+        Just x -> return x
 -}
-comm :: Rule (TExpr EqRepr)
-comm = Rule (Name "commutative") $ \cls eqElem -> trace "körs in" $ do
-    case eqElem of
-        Add x y -> do
-            p <- addTerm (Add y x)
-            bo <- equivalent p cls
-            case not bo of
-                True  -> trace "körs" $ union p cls >> return Applied
-                False -> trace "already" $ return Failed
+addTerm t = do
+    r <- getClass t
+    case r of
+        Nothing  -> makeClass t
+        Just rep -> return $ rep
 
-runARule :: EqRepr -> TExpr EqRepr -> Opt Result
-runARule cls rep = trace "testa" $ do 
-    rule <- getTopRule cls
-    case rule of
-        Just (Rule meta f)  -> trace "hitta regel" $ f cls rep
-        Nothing -> trace "fail" $ return Failed 
-
-
-
-    {-
-    res <- forM elems $ \rep -> case (pattern,rep) of
-        (Pattern (Left (Add q1 q2)), Add p1 p2) -> do
-            r1 <- applyPattern q1 p1 
-            r2 <- applyPattern q2 p2
-            return $ fun r1 r2 
-        (PAny i, _)             -> return [[(i,cls)]]
-        _                       -> return []
-    -}
-    --return $ res
+--addTermToClass :: TExpr EqRepr -> EqRepr -> Opt EqRepr
+--addTermToClass term cls = union cls =<< addTerm term 
 

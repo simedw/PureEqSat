@@ -10,4 +10,5 @@ module DisjointSetA
     , runEqClass -- :: m a -> a
     ) where
 
-import ListSetA
+--import ListSetA
+import IOSetA

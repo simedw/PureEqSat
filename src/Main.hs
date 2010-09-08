@@ -1,4 +1,4 @@
 module Main where
-import TestExpr2
+import TestExpr
 
-main = testExpr2 test2'
+main = testExpr2 texpr3
