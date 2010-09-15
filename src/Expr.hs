@@ -30,9 +30,12 @@ newtype Expr = In { out :: TExpr Expr } deriving (Eq, Ord)
 instance Show Expr where
     show v = case out v of
         Lit i -> show i
-        Var s -> show s
-        Add p q -> show p ++ " + " ++ show q
-        Mul p q -> show p ++ " * " ++ show q
+        Var s -> s
+        Add p q -> paren $ show p ++ " + " ++ show q
+        Mul p q -> paren $ show p ++ " * " ++ show q
+
+paren :: String -> String
+paren xs = '(':xs ++ ")"
 
 newtype EqExpr = EqExpr {unEqExpr :: TExpr (Opt.EqRepr EqExpr)}
 
@@ -97,8 +100,8 @@ similar _ _ = return False
 
 addTermToClass :: EqExpr -> Maybe EqRepr -> Opt EqRepr
 addTermToClass term Nothing    = addTerm term
-addTermToClass term (Just cls) = do
-    -- union cls =<< addTerm term
+addTermToClass term (Just cls) = union cls =<< addTerm term
+    {- -- union cls =<< addTerm term
     terms <- getElems cls
     xs <- filterM (similar term) terms
     if null xs
@@ -106,8 +109,9 @@ addTermToClass term (Just cls) = do
             r <- getClass term
             case r of
                 Nothing -> addElem term cls >> return cls
-                Just cl -> return cl
+                Just cl -> union cl cls
         else return cls
+    -}
 {- old 
         then addElem term cls >> return cls
             -- union cls =<< addTerm term 

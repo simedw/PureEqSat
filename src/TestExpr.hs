@@ -25,20 +25,21 @@ printClass rep = do
     liftIO $ putStrLn $ "[#" ++ show i ++ " (size: " ++ show (S.size s) ++ ")]"
     forM_ (S.toList s) $ do \(EqExpr e) -> (showTerm e >>= \str -> liftIO $ putStrLn $ "  " ++ str)
     return ()
-  where
-    showTerm (Add p1 p2) = do
-        q1 <- pointTo p1
-        q2 <- pointTo p2 
-        return $ "#" ++ show q1 ++ " + #" ++  show q2
-    showTerm (Mul p1 p2) = do
-        q1 <- pointTo p1
-        q2 <- pointTo p2 
-        return $ "#" ++ show q1 ++ " * #" ++  show q2
-    showTerm (Lit i )    = return $ show i
-    showTerm (Var x)     = return $ show x
-    pointTo p = do
+
+pointTo p = do
         (Root c _ _) <- lift $  rootIO p
         return c
+
+showTerm (Add p1 p2) = do
+    q1 <- pointTo p1
+    q2 <- pointTo p2 
+    return $ "#" ++ show q1 ++ " + #" ++  show q2
+showTerm (Mul p1 p2) = do
+    q1 <- pointTo p1
+    q2 <- pointTo p2 
+    return $ "#" ++ show q1 ++ " * #" ++  show q2
+showTerm (Lit i )    = return $ show i
+showTerm (Var x)     = return $ show x
 
 testExpr :: Expr -> IO ()
 testExpr expr = runOpt $ do
@@ -53,10 +54,13 @@ testExpr expr = runOpt $ do
     liftIO $ putStrLn $ "number of classes pointers: " ++ show (length cls)
     m <- liftIO $ newIORef M.empty
     res <- buildExpr m rep
-    liftIO $ putStrLn "from:"
-    liftIO $ print expr
-    liftIO $ putStrLn "to:"
-    liftIO $ print res
+    p <- pointTo rep
+    liftIO $ do
+        putStrLn "from:"
+        putStr $ show expr
+        putStrLn $ " @ #" ++ show p
+        putStrLn "to:"
+        print res
     
 test0' = lit 3 +. lit 1
 test1' = lit 2
@@ -82,6 +86,9 @@ buildExpr m rep = do
             liftIO $ writeIORef m (M.insert rep Nothing ltable) 
             terms <- Opt.getElems rep
             let pre_values = zip (map buildPre terms) terms
+            Root p _ _ <- lift $ rootIO rep
+            liftIO $ putStrLn $ "for class " ++ show p
+            mapM_ (\(val , EqExpr e) -> (liftIO . putStrLn) =<< showTerm e) pre_values
             resl <- mapM (buildExpr' m) (best pre_values)
             let res = head $ sortBy (\(x,_) (y,_) -> x `compare` y) resl
             ltable <- liftIO $ readIORef m
@@ -90,7 +97,7 @@ buildExpr m rep = do
   where
     buildPre rep = case unEqExpr rep of
         Add p1 p2 -> 3
-        Mul p1 p2 -> 4
+        Mul p1 p2 -> 3
         Var v     -> 1
         Lit i     -> 1 
 

@@ -7,7 +7,7 @@ import Expr
 import Opt hiding (EqRepr)
 import Debug.Trace
 import Data.Maybe
-import Data.List (groupBy,sort)
+import Data.List (groupBy,sort, sortBy)
 import Control.Monad
 
 type ID = Int
@@ -33,11 +33,14 @@ plit x   = Pattern $ Left (Lit x)
 pvar x   = Pattern $ Left (Var x)
 
 rules :: [(Int,Rule)]
-rules = [ (1, com)
-        , (2, assoc)
+rules = [ (2, com)
+        , (3, assoc)
         -- , test4
-        , (2, test5)
-        , (2, addIden)
+        , (3, test5)
+        , (3, addIden)
+        , (3, forall2 $ \x y -> mul x y ~> mul y x)
+        , (4, forall3 $ \x y z -> mul x (add y z) ~> add (mul x y) (mul x z))
+        , (4, forall3 $ \x y z -> add (mul x y) (mul x z) ~> mul x (add y z))
         ] 
         
 test2 = forall3 $ \x y z -> add (add x y) z
@@ -57,7 +60,9 @@ apply (p1 :~> p2) cls = do
     -- TODO: check if the code works :)
     --trace ("apply: " ++ show ma) $ return ()
     ma <- filterM (\l -> do 
-        let same = map (map  snd) $ groupBy (\x y -> fst x == fst y) l
+        let same = map (map  snd) 
+                     $ groupBy (\x y -> fst x == fst y) 
+                     $ sortBy (\x y -> compare (fst x) (fst y)) $ l
         liftM and $ mapM eqRec same
         ) ma
     --liftM null $ mapM (buildPattern' cls p2) ma
