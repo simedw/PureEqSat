@@ -32,11 +32,14 @@ mul x y = Pattern $ Left (Mul x y)
 plit x   = Pattern $ Left (Lit x)
 pvar x   = Pattern $ Left (Var x)
 
-rules = [com
-        , assoc
-        --, test4
-        , test5] -- vet inte om det är användbart :)
-
+rules :: [(Int,Rule)]
+rules = [ (1, com)
+        , (2, assoc)
+        -- , test4
+        , (2, test5)
+        , (2, addIden)
+        ] 
+        
 test2 = forall3 $ \x y z -> add (add x y) z
 test3 = forall3 $ \x y z -> add (add x y) z ~> add x (add y z) 
 com   = forall2 $ \x y -> add x y ~> add y x
@@ -44,6 +47,7 @@ assoc = forall3 $ \x y z -> add (add x y) z ~> add x (add y z)
 
 test4 = forall1 $ \x -> add x x ~> mul x (plit 2)
 test5 = forall1 $ \x -> mul x (plit 0) ~> plit 0
+addIden = forall1 $ \x -> add x (plit 0) ~> x
 
 -- returns True when nothing matched
 apply :: Rule -> EqRepr -> Opt Bool
@@ -58,9 +62,9 @@ apply (p1 :~> p2) cls = do
         ) ma
     --liftM null $ mapM (buildPattern' cls p2) ma
     
-    list <- mapM (buildPattern p2) $ ma
-    ls <- mapM (union cls) list
-    return $ null ls
+    list <- mapM (buildPattern (Just cls) p2) $ ma
+    --ls <- mapM (union cls) list
+    return $ null list
 
 --    mapM_ ls (markDirty
 
@@ -85,19 +89,27 @@ buildPattern' rep p ma = case p of
     PAny i     -> maybe (error $ "buildPattern: " ++ show i ++ " in " ++ show ma ++ ", pattern: " ++ show p) return $ lookup i ma
 -}
 
-buildPattern :: Pattern -> [(ID,EqRepr)] -> Opt EqRepr
-buildPattern p ma = case p of
-    Pattern (Left (Lit i)) -> addTerm (EqExpr $ Lit i)
-    Pattern (Left (Var x)) -> addTerm (EqExpr $ Var x)
+buildPattern :: Maybe EqRepr -> Pattern -> [(ID,EqRepr)] -> Opt EqRepr
+buildPattern cls p ma = case p of
+    Pattern (Left (Lit i)) -> addTermToClass (EqExpr $ Lit i) cls
+    Pattern (Left (Var x)) -> addTermToClass (EqExpr $ Var x) cls
     Pattern (Left (Add q1 q2)) -> do
-        p1 <- buildPattern q1 ma
-        p2 <- buildPattern q2 ma
-        addTerm (EqExpr $ Add p1 p2)
+        p1 <- buildPattern Nothing q1 ma
+        p2 <- buildPattern Nothing q2 ma
+        c <- addTermToClass  (EqExpr $ Add p1 p2) cls
+        c `dependOn` [p1,p2]
+        return c
     Pattern (Left (Mul q1 q2)) -> do
-        p1 <- buildPattern q1 ma
-        p2 <- buildPattern q2 ma
-        addTerm (EqExpr $ Mul p1 p2)             
-    PAny i     -> maybe (error $ "buildPattern: " ++ show i ++ " in " ++ show (map fst ma) ++ ", pattern: " ++ show p) return $ lookup i ma
+        p1 <- buildPattern Nothing q1 ma
+        p2 <- buildPattern Nothing q2 ma
+        c <- addTermToClass (EqExpr $ Mul p1 p2) cls
+        c `dependOn` [p1,p2]
+        return c             
+    PAny i     -> do
+--        c <- maybe (error $ "buildPattern: " ++ show i ++ " in " ++ show (map fst ma) ++ ", pattern: " ++ show p) return $ lookup i ma
+        let c = fromJust $ lookup i ma
+        -- cls :: Maybe EqRepr
+        maybe (return c) (union c) cls
 
 fun :: Eq a => [[a]] -> [[a]] -> [[a]]
 fun xs ys = [x ++ y | x <- xs, y <- ys] 
@@ -135,19 +147,27 @@ applyPattern pattern cls = do
         
         
 
-applyRules :: [Rule] -> EqRepr -> Opt ()
-applyRules rules reps = mapM_ apply' (zip [1..] rules)
+applyRules :: [(Int, Rule)] -> EqRepr -> Opt ()
+applyRules rules reps = do
+    bs <- mapM apply' rules
+    when (and bs) $ updated reps Nothing
   where
-    apply' (id, rule) = do
-        dirty <- shouldApply id reps
+    apply' (depth, rule) = do
+        dirty <- getDepth reps
+        case dirty of
+            Nothing -> return True
+            Just d 
+              | d <= depth -> apply rule reps
+              | otherwise -> return True
+{-        dirty <- shouldApply id reps
         if not dirty then return () else (do 
             v <- apply rule reps -- v == true if nothing applied
             if v then setShouldNotApply id reps else return ()
             )
-
+-}
 -- applys rules many times or something
-ruleEngine :: [Rule] -> Opt ()
+ruleEngine :: [(Int,Rule)] -> Opt ()
 ruleEngine rules = do
   classes <- getClasses
   mapM_ (applyRules rules) classes
-    -- skulle vara bra att ha en getClasses, vi gor en sadan!
+

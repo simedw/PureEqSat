@@ -18,18 +18,42 @@ newtype IOSet s a = IS { runLS :: StateT (IState s) IO a }
 
 data IState s = IState
     { classes :: [EqRepr s] -- Only pointer to Root elems!
-    , number  :: Int
+    , number  :: CompareType
     }
 
 type EqMonad = IOSet
 
 type EqRepr s = IOStableRef (MinEqRepr s)
 
+type Depth = Int
 type Rank = Int
 type CompareType = Int
 data MinEqRepr s 
-  = Root CompareType Rank (Set s) 
+  = Root CompareType Rank (EqData s)
   | Node (EqRepr s)
+
+data EqData s = EqData
+    { eqSet  :: (Set s)
+    , eqDependOnMe :: Set (EqRepr s)
+    , eqIDependOn  :: Set (EqRepr s)
+    , depth :: Maybe Depth
+    }
+
+unionFunction :: Ord s => EqData s -> EqData s -> EqData s
+unionFunction x y = EqData
+    { eqSet        = eqSet x `S.union` eqSet y
+    , eqDependOnMe = eqDependOnMe x `S.union` eqDependOnMe y
+    , eqIDependOn   = eqIDependOn x `S.union` eqIDependOn y
+    , depth  = Just 0 
+    }
+
+makeData :: s -> EqData s
+makeData s = EqData
+    { eqSet = S.singleton s
+    , eqDependOnMe = S.empty
+    , eqIDependOn  = S.empty
+    , depth        = Just 0
+    }
 
 root :: EqRepr s -> IOSet s (EqRepr s)
 root rep = do
@@ -49,7 +73,7 @@ rootIO rep = do
 makeClass :: eqElem -> IOSet eqElem (EqRepr eqElem)
 makeClass elem = do
     nr <- gets number
-    v <- liftIO $ newIOStableRef (Root nr 0 (S.singleton elem))
+    v <- liftIO $ newIOStableRef (Root nr 0 (makeData elem))
     modify $ \ s -> s { classes = v : classes s
                       , number= nr + 1
                       }
@@ -66,8 +90,8 @@ union :: Ord e => EqRepr e -> EqRepr e -> IOSet e (EqRepr e)
 union x y = do
     iox <- root x
     ioy <- root y
-    xroot@(Root xc xrank xset) <- liftIO $ readIOStableRef iox
-    yroot@(Root yc yrank yset) <- liftIO $ readIOStableRef ioy
+    xroot@(Root xc xrank xdata) <- liftIO $ readIOStableRef iox
+    yroot@(Root yc yrank ydata) <- liftIO $ readIOStableRef ioy
     case (xrank > yrank, xrank < yrank, xc /= yc) of
         (True , _   , _   ) -> iox `setRootTo` ioy
         (False,True , _   ) -> ioy `setRootTo` iox
@@ -77,32 +101,52 @@ union x y = do
     -- make y the root of x
     setRootTo :: Ord e => EqRepr e -> EqRepr e -> IOSet e (EqRepr e)
     setRootTo x y = do
-        xroot@(Root cx xrank xset) <- liftIO $ readIOStableRef x
-        yroot@(Root cy yrank yset) <- liftIO $ readIOStableRef y
+        xroot@(Root cx xrank xdata) <- liftIO $ readIOStableRef x
+        yroot@(Root cy yrank ydata) <- liftIO $ readIOStableRef y
         liftIO $ writeIOStableRef x $ Node y
-        liftIO $ writeIOStableRef y $ Root cy yrank (yset `S.union` xset)
+        liftIO $ writeIOStableRef y $ Root cy yrank (ydata `unionFunction` xdata) 
         return y         
     incRank :: EqRepr e -> IOSet e (EqRepr e)
     incRank x = do
-        Root c rank set <- liftIO $ readIOStableRef x
-        liftIO $ writeIOStableRef x (Root c (rank + 1) set)
+        Root c rank dat <- liftIO $ readIOStableRef x
+        liftIO $ writeIOStableRef x (Root c (rank + 1) dat)
         return x
+
+addElem :: Ord e => e -> EqRepr e -> EqMonad e ()
+addElem elem rep = do
+    Root c r dat <- rootIO rep
+    liftIO $ writeIOStableRef rep (Root c r dat { eqSet = S.insert elem (eqSet dat) })
 
 getElems :: EqRepr e -> EqMonad e [e]
 getElems x = do
-    Root _ _ set <- rootIO x
-    return $ S.toList set
+    Root _ _ dat <- rootIO x
+    return $ S.toList (eqSet dat)
 
 getClass :: Ord e => e -> EqMonad e (Maybe (EqRepr e))
 getClass elem = do
     cls <- getClasses
     liftM (listToMaybe . concat) $ forM cls $ \c -> do
-        Root _ _ set <- rootIO c
-        case elem `S.member` set of
+        Root _ _ dat <- rootIO c
+        case elem `S.member` eqSet dat of
             True  -> return [c]
             False -> return []
 
 getClasses :: EqMonad e [EqRepr e]
+getClasses = do
+    cls <- gets classes
+    ls <- fun cls S.empty
+    modify $ \s -> s { classes = ls}
+    return ls
+  where
+    fun [] set = return []
+    fun (cls : classes) set = do
+        eq <- liftIO $ readIOStableRef cls
+        case eq of
+            Root c _ _ | c `S.member` set -> fun classes set
+                       | otherwise        -> liftM (cls :) $  fun classes (S.insert c set)
+            _ -> fun classes set
+   
+   {-
 getClasses = do
     cls <- gets classes
     ls <- flip filterM cls $ \c -> do
@@ -112,7 +156,40 @@ getClasses = do
             _          -> return False
     modify $ \s -> s { classes = ls}
     return ls
+-}
 
+
+-- ps <| p
+-- ska den har satta at bada hallen?
+-- mm, funderar på om man ska ändra så att Root har speciell datatyp för all sin
+-- data som den sparar. Så att man kan ha en withRoot :: (Data -> (Data,a)) -> EqRepr -> Opt a 
+-- kanske blir skoj
+
+getDependOnMe :: EqRepr e -> EqMonad e [EqRepr e]
+getDependOnMe = liftM (\(Root _ _ dat) -> S.toList $ eqDependOnMe dat) . rootIO
+
+dependOn :: EqRepr e -> [EqRepr e] -> EqMonad e ()
+p `dependOn` ps = do
+    Root c r dat <- rootIO p
+    liftIO $ writeIOStableRef p $ Root c r dat { eqIDependOn = eqIDependOn dat `S.union` S.fromList ps}
+    forM_ ps $ \ dep -> do
+        Root cd rd dat <- rootIO dep
+        liftIO $ writeIOStableRef dep $ Root cd rd dat { eqDependOnMe = S.insert p (eqDependOnMe dat) }
+
+
+updated :: EqRepr e -> Maybe Depth -> EqMonad e ()
+updated cls deep = do
+    Root a b dat <- rootIO cls
+    -- om den i dat är Nothing ska vi sätta den högra annars sätta min såvida inte depth är nothing
+    let dat' = case depth dat of
+         Nothing -> dat { depth = deep }
+         Just de -> dat { depth = liftM (min de) deep } -- :)
+    liftIO $ writeIOStableRef cls $ Root a b dat'
+
+getDepth :: EqRepr s -> EqMonad s (Maybe Depth)
+getDepth reps = do
+    Root _ _ dat <- rootIO reps
+    return $ depth dat
 
 runEqClass :: EqMonad e a -> IO a
 runEqClass m = evalStateT (runLS m) $ IState { classes = [], number = 0 }
@@ -170,6 +247,7 @@ prop_equivalent_trans x y z = do
     return xz
 
 
+{-
 runTest = do
     quickCheck prop_makeclass
     quickCheck prop_makeclassexist
@@ -178,9 +256,9 @@ runTest = do
     quickCheck prop_getElem
     quickCheck prop_union
 
-
 instance Testable b => Testable (IOSet a b) where
    property b = property $ runEqClass b 
+-}
 
 {-
 interface
