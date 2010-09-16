@@ -11,20 +11,33 @@ import Data.Maybe
 import Data.List (groupBy,sort)
 import Control.Monad
 
+
+data Lit
+    = LInteger Integer
+    | LBool Bool
+  deriving (Eq,Ord,Show)
+
 data TExpr r 
-    = Lit Integer
+    = Lit Lit
     | Var String
     | Add r r
     | Mul r r
+    | And r r
+    | Or  r r
+    | Eq r r
     deriving (Eq, Ord, Show)
 
+
+tand x y = In (And x y)
+tor  x y = In (Or x y)
+int = In . Lit . LInteger
+bool = In . Lit . LBool
 lit = In . Lit
 var = In . Var
-x +. y = In (Add x y)
-x *. y = In (Mul x y)
+x +. y  = In (Add x y)
+x *. y  = In (Mul x y)
+x ==. y = In (Eq x y)
 
--- Skall vi trixa med något som detta?
---newtype Fix f = In { out :: f (Fix f) } deriving (Eq, Ord)
 newtype Expr = In { out :: TExpr Expr } deriving (Eq, Ord)
 
 instance Show Expr where
@@ -33,6 +46,9 @@ instance Show Expr where
         Var s -> s
         Add p q -> paren $ show p ++ " + " ++ show q
         Mul p q -> paren $ show p ++ " * " ++ show q
+        And p q -> paren $ show p ++ " `and` " ++ show q
+        Or  p q -> paren $ show p ++ " `or` " ++ show q    
+        Eq  p q -> paren $ show p ++ " == " ++ show q
 
 paren :: String -> String
 paren xs = '(':xs ++ ")"
@@ -50,20 +66,21 @@ type EqRepr = Opt.EqRepr EqExpr
 type Opt = OptMonad EqExpr
 
 addExpr :: Expr -> Opt EqRepr
-addExpr (In (Lit i)) = addTerm (EqExpr $ Lit i)
-addExpr (In (Var x)) = addTerm (EqExpr $ Var x)
-addExpr (In (Add x y)) = do
-    x' <- addExpr x
-    y' <- addExpr y
-    c <- addTerm (EqExpr $ Add x' y')
-    c `dependOn` [x',y']
-    return c
-addExpr (In (Mul x y)) = do
-    x' <- addExpr x
-    y' <- addExpr y
-    c <- addTerm (EqExpr $ Mul x' y')
-    c `dependOn` [x',y']
-    return c
+addExpr exp = case out exp of
+    Lit i   -> addTerm (EqExpr $ Lit i)
+    Var x   -> addTerm (EqExpr $ Var x)
+    Add x y -> addBinTerm Add x y
+    Mul x y -> addBinTerm Mul x y
+    And x y -> addBinTerm And x y
+    Or  x y -> addBinTerm Or  x y
+    Eq  x y -> addBinTerm Eq  x y
+  where
+    addBinTerm op x y = do
+        x' <- addExpr x
+        y' <- addExpr y
+        c <- addTerm (EqExpr $ op x' y')
+        c `dependOn` [x',y']
+        return c
 
 addTerm :: EqExpr -> Opt EqRepr
 {-addTerm t@(EqExpr (Add p1 p2)) = do
@@ -87,7 +104,7 @@ addTerm t = do
     r <- getClass t
     case r of
         Nothing  -> makeClass t
-        Just rep -> return $ rep
+        Just rep -> return rep
 
 similar :: EqExpr -> EqExpr -> Opt Bool
 similar (EqExpr (Lit i)) (EqExpr (Lit i')) = return (i == i')
@@ -100,7 +117,8 @@ similar _ _ = return False
 
 addTermToClass :: EqExpr -> Maybe EqRepr -> Opt EqRepr
 addTermToClass term Nothing    = addTerm term
-addTermToClass term (Just cls) = union cls =<< addTerm term
+addTermToClass term (Just cls) = addTerm term >>= union cls
+--addTermToClass term (Just cls) = addTerm term >>= flip union cls
     {- -- union cls =<< addTerm term
     terms <- getElems cls
     xs <- filterM (similar term) terms

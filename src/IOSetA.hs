@@ -87,11 +87,10 @@ equivalent x y = do
 
 
 union :: Ord e => EqRepr e -> EqRepr e -> IOSet e (EqRepr e)
-union x y = do
-    iox <- root x
-    ioy <- root y
-    xroot@(Root xc xrank xdata) <- liftIO $ readIOStableRef iox
-    yroot@(Root yc yrank ydata) <- liftIO $ readIOStableRef ioy
+union iox ioy = do
+    (Root xc xrank xdata) <- rootIO iox
+    (Root yc yrank ydata) <- rootIO ioy
+    --liftIO $ putStrLn $ "union #" ++ show xc ++ " #" ++ show yc ++ "(" ++ show xrank ++ "," ++ show yrank ++ ")"
     case (xrank > yrank, xrank < yrank, xc /= yc) of
         (True , _   , _   ) -> iox `setRootTo` ioy
         (False,True , _   ) -> ioy `setRootTo` iox
@@ -101,19 +100,24 @@ union x y = do
     -- make y the root of x
     setRootTo :: Ord e => EqRepr e -> EqRepr e -> IOSet e (EqRepr e)
     setRootTo x y = do
-        xroot@(Root cx xrank xdata) <- liftIO $ readIOStableRef x
-        yroot@(Root cy yrank ydata) <- liftIO $ readIOStableRef y
+        x <- root x
+        y <- root y
+        (Root cx xrank xdata) <- rootIO x
+        (Root cy yrank ydata) <- rootIO y
+        liftIO $ writeIOStableRef y $ Root (min cx cy) yrank (ydata `unionFunction` xdata) 
         liftIO $ writeIOStableRef x $ Node y
-        liftIO $ writeIOStableRef y $ Root cy yrank (ydata `unionFunction` xdata) 
-        return y         
+        return y
+
     incRank :: EqRepr e -> IOSet e (EqRepr e)
     incRank x = do
-        Root c rank dat <- liftIO $ readIOStableRef x
+        x <- root x
+        Root c rank dat <- rootIO x
         liftIO $ writeIOStableRef x (Root c (rank + 1) dat)
         return x
 
 addElem :: Ord e => e -> EqRepr e -> EqMonad e ()
 addElem elem rep = do
+    rep <- root rep
     Root c r dat <- rootIO rep
     liftIO $ writeIOStableRef rep (Root c r dat { eqSet = S.insert elem (eqSet dat) })
 
@@ -170,15 +174,18 @@ getDependOnMe = liftM (\(Root _ _ dat) -> S.toList $ eqDependOnMe dat) . rootIO
 
 dependOn :: EqRepr e -> [EqRepr e] -> EqMonad e ()
 p `dependOn` ps = do
+    p <- root p
     Root c r dat <- rootIO p
     liftIO $ writeIOStableRef p $ Root c r dat { eqIDependOn = eqIDependOn dat `S.union` S.fromList ps}
     forM_ ps $ \ dep -> do
+        dep <- root dep
         Root cd rd dat <- rootIO dep
         liftIO $ writeIOStableRef dep $ Root cd rd dat { eqDependOnMe = S.insert p (eqDependOnMe dat) }
 
 
 updated :: EqRepr e -> Maybe Depth -> EqMonad e ()
 updated cls deep = do
+    cls <- root cls
     Root a b dat <- rootIO cls
     -- om den i dat är Nothing ska vi sätta den högra annars sätta min såvida inte depth är nothing
     let dat' = case depth dat of
@@ -247,7 +254,7 @@ prop_equivalent_trans x y z = do
     return xz
 
 
-{-
+
 runTest = do
     quickCheck prop_makeclass
     quickCheck prop_makeclassexist
@@ -258,7 +265,7 @@ runTest = do
 
 instance Testable b => Testable (IOSet a b) where
    property b = property $ runEqClass b 
--}
+
 
 {-
 interface

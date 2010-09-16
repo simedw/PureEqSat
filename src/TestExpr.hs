@@ -27,34 +27,39 @@ printClass rep = do
     return ()
 
 pointTo p = do
-        (Root c _ _) <- lift $  rootIO p
+        (Root c _ _) <- lift $ rootIO p
         return c
 
-showTerm (Add p1 p2) = do
+showTerm exp = case exp of
+    Add p1 p2 -> showBin "+" p1 p2
+    Mul p1 p2 -> showBin "*" p1 p2
+    And p1 p2 -> showBin "`and`" p1 p2
+    Or  p1 p2 -> showBin "`or`" p1 p2
+    Eq  p1 p2 -> showBin "==" p1 p2
+    Lit i -> return $ show i
+    Var x -> return $ show x
+  where
+    showBin op p1 p2 = do
     q1 <- pointTo p1
     q2 <- pointTo p2 
-    return $ "#" ++ show q1 ++ " + #" ++  show q2
-showTerm (Mul p1 p2) = do
-    q1 <- pointTo p1
-    q2 <- pointTo p2 
-    return $ "#" ++ show q1 ++ " * #" ++  show q2
-showTerm (Lit i )    = return $ show i
-showTerm (Var x)     = return $ show x
+    return $ "#" ++ show q1 ++ " " ++ op ++ " #" ++  show q2
 
 testExpr :: Expr -> IO ()
 testExpr expr = runOpt $ do
     rep <- addExpr expr
-    cls <- lift $ gets classes
+    p <- pointTo rep
+    liftIO $  putStrLn $ "rep: #" ++ show p 
+    cls <- Opt.getClasses
     mapM_ printClass $ reverse cls
     liftIO $ putStrLn $ "number of classes pointers: " ++ show (length cls)
     liftIO $ putStrLn "-----------------"
-    replicateM_ 2 $ ruleEngine rules
+    replicateM_ 3 $ ruleEngine rules
     cls <- Opt.getClasses
     mapM_ printClass $ reverse cls
     liftIO $ putStrLn $ "number of classes pointers: " ++ show (length cls)
     m <- liftIO $ newIORef M.empty
-    res <- buildExpr m rep
     p <- pointTo rep
+    res <- buildExpr m rep
     liftIO $ do
         putStrLn "from:"
         putStr $ show expr
@@ -62,15 +67,18 @@ testExpr expr = runOpt $ do
         putStrLn "to:"
         print res
     
-test0' = lit 3 +. lit 1
-test1' = lit 2
-test2' = (lit 2 +. lit 3) +. (lit 3 +. lit 4)
-test3' = (lit 2 +. lit 3) +. (lit 3 +. lit 2)
+test0' = int 3 +. int 1
+test1' = int 2
+test2' = (int 2 +. int 3) +. (int 3 +. int 4)
+test3' = (int 2 +. int 3) +. (int 3 +. int 2)
 texpr0 = var "x" +. var "x"
 texpr1 = var "y" +. var "x"
-texpr2 = var "x" *. lit 0
-texpr3 = var "a" +. var "b" +. var "c" +. var "d" +. lit 0
-texpr4 = lit 3 +. lit 0
+texpr2 = var "x" *. int 0
+texpr3 = var "a" +. var "b" +. var "c" +. var "d" +. int 0
+texpr4 = int 3 +. int 0
+texpr5 = bool True `tor` bool False
+texpr7 = (bool True ==. bool False) `tor` (int 2 ==. (int 2 *. int 1))
+
 
 -- eqexpr eller expr
 -- tankte mig expr
@@ -96,24 +104,28 @@ buildExpr m rep = do
             return res
   where
     buildPre rep = case unEqExpr rep of
-        Add p1 p2 -> 3
-        Mul p1 p2 -> 3
-        Var v     -> 1
-        Lit i     -> 1 
+        Add _ _ -> 3
+        Mul _ _ -> 3
+        Or  _ _ -> 3
+        And _ _ -> 3
+        Eq _ _  -> 3
+        Var _   -> 1
+        Lit _   -> 1 
 
     buildExpr' :: IORef (M.Map EqRepr (Maybe (Int,Expr))) -> EqExpr -> Opt (Int, Expr)
     buildExpr' m rep = case unEqExpr rep of
-        Add p1 p2 -> do
+        Add p1 p2 -> buildBin  Add 3 p1 p2
+        Mul p1 p2 -> buildBin  Mul 3 p1 p2
+        And p1 p2 -> buildBin  And 3 p1 p2
+        Or  p1 p2 -> buildBin  Or  3 p1 p2
+        Eq  p1 p2 -> buildBin  Eq  3 p1 p2
+        Var v -> return (1,In $ Var v)
+        Lit i -> return (1,In $ Lit i)
+     where
+        buildBin op cost p1 p2 = do
             (c1,q1) <- buildExpr m p1
             (c2,q2) <- buildExpr m p2
-            return (c1+c2+3,In $ Add q1 q2)
-        Mul p1 p2 -> do
-            (c1,q1) <- buildExpr m p1
-            (c2,q2) <- buildExpr m p2
-            return (c1+c2+4,In $ Mul q1 q2)
-        Var v     -> return (1,In $ Var v)
-        Lit i     -> return (1,In $ Lit i)
-
+            return (c1+c2+3,In $ q1 `op` q2)
 
 -- should be in prelude
 best :: Ord a => [(a,b)] -> [b]
@@ -122,3 +134,4 @@ best xs = map snd $ best' (fst $ head sorted) sorted
     sorted = sortBy (\(x,_) (y,_) -> x `compare` y) xs
     best' v ((x,y):xs) | x <= v = (x,y) : best' v xs
     best' _ _ = []
+
