@@ -27,14 +27,16 @@ forall3 f = f (PAny 1) (PAny 2) (PAny 3)
 forall2 f = f (PAny 1) (PAny 2)
 forall1 f = f (PAny 1)
 
-pand x y = Pattern $ Left (And x y)
-por x y  = Pattern $ Left (Or x y)
-add x y  = Pattern $ Left (Add x y)
-mul x y  = Pattern $ Left (Mul x y)
-pint x   = Pattern $ Left (Lit $ LInteger x)
-pbool x  = Pattern $ Left (Lit $ LBool x)
-pvar x   = Pattern $ Left (Var x)
-peq x y  = Pattern $ Left (Eq x y)
+pand x y  = Pattern $ Left (And x y)
+por x y   = Pattern $ Left (Or x y)
+add x y   = Pattern $ Left (Add x y)
+mul x y   = Pattern $ Left (Mul x y)
+pint x    = Pattern $ Left (Lit $ LInteger x)
+pbool x   = Pattern $ Left (Lit $ LBool x)
+pvar x    = Pattern $ Left (Var x)
+peq x y   = Pattern $ Left (Eq x y)
+pif x y z = Pattern $ Left (If x y z)
+
 
 rules :: [(Int,Rule)]
 rules = [ (3, assoc add)
@@ -53,6 +55,8 @@ rules = [ (3, assoc add)
         , (2, forall1 $ \x -> x `peq` x ~> pbool True)
         , (2, forall1 $ \x -> x `mul` (pint 0) ~> pint 0)
         , (1, forall1 $ \x -> (x `por` pbool True) ~> pbool True)
+        , (1, forall2 $ \x y -> pif (pbool True) x y ~> x)
+        , (1, forall2 $ \x y -> pif (pbool False) x y ~> y)
         ] 
 
 identity op v = forall1 $ \x -> (x `op` v) ~> x        
@@ -118,6 +122,16 @@ fum _ []  = Nothing
 --fum (x:xs) (y:ys) = Just (x ++ y)
 fum xs ys = Just . concat $ [x ++ y | x <- xs, y <- ys]
 
+-- TODO: give it a proper name
+tum :: [[a]] -> [[a]] -> [[a]] -> Maybe [a]
+tum [] _ _ = Nothing
+tum _ [] _ = Nothing
+tum _ _ [] = Nothing
+tum xs ys zs = Just . concat $ [x ++ y ++ z | x <- xs, y <- ys, z <- zs]
+
+
+
+
 applyPattern :: Pattern -> EqRepr -> Opt [[(ID, EqRepr)]]
 applyPattern pattern cls = do 
     elems <- getElems cls
@@ -159,6 +173,14 @@ applyPattern pattern cls = do
                 r2 <- applyPattern q2 p2
                 return $ fum r1 r2
             _ -> return Nothing
+        Pattern (Left (If q1 q2 q3)) -> liftM catMaybes $ forM elems $ \rep -> case rep of
+            EqExpr (If p1 p2 p3) -> do
+                r1 <- applyPattern q1 p1 
+                r2 <- applyPattern q2 p2
+                r3 <- applyPattern q3 p3
+                return $ tum r1 r2 r3
+            _ -> return Nothing
+ 
         PAny i -> return [[(i,cls)]]
         
 

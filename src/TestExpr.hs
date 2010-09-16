@@ -38,6 +38,11 @@ showTerm exp = case exp of
     Eq  p1 p2 -> showBin "==" p1 p2
     Lit i -> return $ show i
     Var x -> return $ show x
+    If p1 p2 p3 -> do
+        q1 <- pointTo p1
+        q2 <- pointTo p2 
+        q3 <- pointTo p3
+        return $ "if #" ++ show q1 ++ " then  #" ++  show q2 ++ " else #" ++ show q3
   where
     showBin op p1 p2 = do
     q1 <- pointTo p1
@@ -78,6 +83,8 @@ texpr3 = var "a" +. var "b" +. var "c" +. var "d" +. int 0
 texpr4 = int 3 +. int 0
 texpr5 = bool True `tor` bool False
 texpr7 = (bool True ==. bool False) `tor` (int 2 ==. (int 2 *. int 1))
+texpr8 = tif (texpr7) texpr4 texpr2
+
 
 
 -- eqexpr eller expr
@@ -109,6 +116,7 @@ buildExpr m rep = do
         Or  _ _ -> 3
         And _ _ -> 3
         Eq _ _  -> 3
+        If _ _ _ -> 3
         Var _   -> 1
         Lit _   -> 1 
 
@@ -121,6 +129,11 @@ buildExpr m rep = do
         Eq  p1 p2 -> buildBin  Eq  3 p1 p2
         Var v -> return (1,In $ Var v)
         Lit i -> return (1,In $ Lit i)
+        If  p1 p2 p3 -> do
+            (c1,q1) <- buildExpr m p1
+            (c2,q2) <- buildExpr m p2
+            (c3,q3) <- buildExpr m p3
+            return (c1 + (max c2 c3) + 3,In $ If q1 q2 q3)
      where
         buildBin op cost p1 p2 = do
             (c1,q1) <- buildExpr m p1

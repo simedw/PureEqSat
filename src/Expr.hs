@@ -25,6 +25,7 @@ data TExpr r
     | And r r
     | Or  r r
     | Eq r r
+    | If r r r
     deriving (Eq, Ord, Show)
 
 
@@ -38,6 +39,8 @@ x +. y  = In (Add x y)
 x *. y  = In (Mul x y)
 x ==. y = In (Eq x y)
 
+tif p tru fls = In (If p tru fls)
+
 newtype Expr = In { out :: TExpr Expr } deriving (Eq, Ord)
 
 instance Show Expr where
@@ -49,6 +52,7 @@ instance Show Expr where
         And p q -> paren $ show p ++ " `and` " ++ show q
         Or  p q -> paren $ show p ++ " `or` " ++ show q    
         Eq  p q -> paren $ show p ++ " == " ++ show q
+        If p l r -> paren $ "if " ++ paren (show p) ++ " then " ++ show l ++ " else " ++ show r
 
 paren :: String -> String
 paren xs = '(':xs ++ ")"
@@ -67,13 +71,14 @@ type Opt = OptMonad EqExpr
 
 addExpr :: Expr -> Opt EqRepr
 addExpr exp = case out exp of
-    Lit i   -> addTerm (EqExpr $ Lit i)
-    Var x   -> addTerm (EqExpr $ Var x)
-    Add x y -> addBinTerm Add x y
-    Mul x y -> addBinTerm Mul x y
-    And x y -> addBinTerm And x y
-    Or  x y -> addBinTerm Or  x y
-    Eq  x y -> addBinTerm Eq  x y
+    Lit i    -> addTerm (EqExpr $ Lit i)
+    Var x    -> addTerm (EqExpr $ Var x)
+    Add x y  -> addBinTerm Add x y
+    Mul x y  -> addBinTerm Mul x y
+    And x y  -> addBinTerm And x y
+    Or  x y  -> addBinTerm Or  x y
+    Eq  x y  -> addBinTerm Eq  x y
+    If x y z -> addTriTerm If x y z
   where
     addBinTerm op x y = do
         x' <- addExpr x
@@ -81,6 +86,14 @@ addExpr exp = case out exp of
         c <- addTerm (EqExpr $ op x' y')
         c `dependOn` [x',y']
         return c
+    addTriTerm op x y z = do
+        x' <- addExpr x
+        y' <- addExpr y
+        z' <- addExpr z
+        c <- addTerm (EqExpr $ op x' y' z')
+        c `dependOn` [x',y', z']
+        return c
+
 
 addTerm :: EqExpr -> Opt EqRepr
 {-addTerm t@(EqExpr (Add p1 p2)) = do
