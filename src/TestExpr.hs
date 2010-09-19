@@ -8,6 +8,9 @@ import IOSetA hiding (EqRepr)
 import Opt hiding (EqRepr)
 import qualified Opt
 
+import Parser
+import Translate (translate)
+
 import Data.List
 import Data.IORef
 import Data.IOStableRef
@@ -26,7 +29,7 @@ printClass rep = do
     forM_ (S.toList s) $ do \(EqExpr e) -> (showTerm e >>= \str -> liftIO $ putStrLn $ "  " ++ str)
     return ()
 
-pointTo p = do
+poeIntTo p = do
         (Root c _ _) <- lift $ rootIO p
         return c
 
@@ -39,31 +42,32 @@ showTerm exp = case exp of
     Lit i -> return $ show i
     Var x -> return $ show x
     If p1 p2 p3 -> do
-        q1 <- pointTo p1
-        q2 <- pointTo p2 
-        q3 <- pointTo p3
+        q1 <- poeIntTo p1
+        q2 <- poeIntTo p2 
+        q3 <- poeIntTo p3
         return $ "if #" ++ show q1 ++ " then  #" ++  show q2 ++ " else #" ++ show q3
+ 
   where
     showBin op p1 p2 = do
-    q1 <- pointTo p1
-    q2 <- pointTo p2 
+    q1 <- poeIntTo p1
+    q2 <- poeIntTo p2 
     return $ "#" ++ show q1 ++ " " ++ op ++ " #" ++  show q2
 
 testExpr :: Expr -> IO ()
 testExpr expr = runOpt $ do
     rep <- addExpr expr
-    p <- pointTo rep
+    p <- poeIntTo rep
     liftIO $  putStrLn $ "rep: #" ++ show p 
     cls <- Opt.getClasses
     mapM_ printClass $ reverse cls
-    liftIO $ putStrLn $ "number of classes pointers: " ++ show (length cls)
+    liftIO $ putStrLn $ "number of classes poeInters: " ++ show (length cls)
     liftIO $ putStrLn "-----------------"
     replicateM_ 3 $ ruleEngine rules
     cls <- Opt.getClasses
     mapM_ printClass $ reverse cls
-    liftIO $ putStrLn $ "number of classes pointers: " ++ show (length cls)
+    liftIO $ putStrLn $ "number of classes poeInters: " ++ show (length cls)
     m <- liftIO $ newIORef M.empty
-    p <- pointTo rep
+    p <- poeIntTo rep
     res <- buildExpr m rep
     liftIO $ do
         putStrLn "from:"
@@ -71,20 +75,33 @@ testExpr expr = runOpt $ do
         putStrLn $ " @ #" ++ show p
         putStrLn "to:"
         print res
-    
-test0' = int 3 +. int 1
-test1' = int 2
-test2' = (int 2 +. int 3) +. (int 3 +. int 4)
-test3' = (int 2 +. int 3) +. (int 3 +. int 2)
-texpr0 = var "x" +. var "x"
-texpr1 = var "y" +. var "x"
-texpr2 = var "x" *. int 0
-texpr3 = var "a" +. var "b" +. var "c" +. var "d" +. int 0
-texpr4 = int 3 +. int 0
-texpr5 = bool True `tor` bool False
-texpr7 = (bool True ==. bool False) `tor` (int 2 ==. (int 2 *. int 1))
-texpr8 = tif (texpr7) texpr4 texpr2
 
+testFileExpr :: FilePath -> IO ()
+testFileExpr fileName = do
+    file <- readFile fileName
+    case parseExpr file of
+        Left err -> print err
+        Right vs -> runOpt $ do
+            eq <- translate vs
+            cls <- Opt.getClasses
+            mapM_ printClass $ reverse cls
+            replicateM_ 3 $ ruleEngine rules
+            m <- liftIO $ newIORef M.empty
+            res <- buildExpr m eq
+            liftIO $ print res  
+    
+test0' = eInt 3 +. eInt 1
+test1' = eInt 2
+test2' = (eInt 2 +. eInt 3) +. (eInt 3 +. eInt 4)
+test3' = (eInt 2 +. eInt 3) +. (eInt 3 +. eInt 2)
+texpr0 = eVar "x" +. eVar "x"
+texpr1 = eVar "y" +. eVar "x"
+texpr2 = eVar "x" *. eInt 0
+texpr3 = eVar "a" +. eVar "b" +. eVar "c" +. eVar "d" +. eInt 0
+texpr4 = eInt 3 +. eInt 0
+texpr5 = eTrue `eOr` eFalse
+texpr7 = (eTrue ==. eFalse) `eOr` (eInt 2 ==. (eInt 2 *. eInt 1))
+texpr8 = eIf (texpr7) texpr4 texpr2
 
 
 -- eqexpr eller expr
@@ -110,6 +127,7 @@ buildExpr m rep = do
             liftIO $ writeIORef m (M.insert rep (Just res) ltable) 
             return res
   where
+    -- could return a bool if it doesn't contain any children
     buildPre rep = case unEqExpr rep of
         Add _ _ -> 3
         Mul _ _ -> 3
@@ -118,7 +136,7 @@ buildExpr m rep = do
         Eq _ _  -> 3
         If _ _ _ -> 3
         Var _   -> 1
-        Lit _   -> 1 
+        Lit _   -> 1
 
     buildExpr' :: IORef (M.Map EqRepr (Maybe (Int,Expr))) -> EqExpr -> Opt (Int, Expr)
     buildExpr' m rep = case unEqExpr rep of

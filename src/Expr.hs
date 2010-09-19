@@ -28,18 +28,20 @@ data TExpr r
     | If r r r
     deriving (Eq, Ord, Show)
 
+-- smart operators
+eAnd x y = In (And x y)
+eOr  x y = In (Or x y)
+eInt     = In . Lit . LInteger
+eBool    = In . Lit . LBool
+eTrue    = eBool True
+eFalse   = eBool False
 
-tand x y = In (And x y)
-tor  x y = In (Or x y)
-int = In . Lit . LInteger
-bool = In . Lit . LBool
-lit = In . Lit
-var = In . Var
+eVar     = In . Var
 x +. y  = In (Add x y)
 x *. y  = In (Mul x y)
 x ==. y = In (Eq x y)
 
-tif p tru fls = In (If p tru fls)
+eIf p tru fls = In (If p tru fls)
 
 newtype Expr = In { out :: TExpr Expr } deriving (Eq, Ord)
 

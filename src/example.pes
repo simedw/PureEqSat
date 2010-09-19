@@ -1,0 +1,3 @@
+y = if False then 5 else 6 * 0
+
+main = z * y
