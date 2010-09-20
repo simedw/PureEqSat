@@ -55,7 +55,6 @@ makeClass x = lift (D.makeClass x)
 equivalent x y = lift (D.equivalent x y)
 --union x y = lift (D.union x y) >>= \s -> resetClass s >> return s
 getElems x = lift (D.getElems x) 
-addElem x cls = lift (D.addElem x cls)
 getClass x = lift (D.getClass x)
 getClasses :: OptMonad eqElem [D.EqRepr eqElem]
 getClasses = lift D.getClasses
@@ -66,20 +65,27 @@ getDepth x = lift (D.getDepth x)
 dependOn x xs = lift (D.dependOn x xs)
 getDependOnMe x = lift (D.getDependOnMe x)
 
-union x y | x == y    = return x
+addElem x cls = do 
+    lift (D.addElem x cls)
+    deps <- getDependOnMe cls
+    fun (S.singleton cls) 1 deps    
+    return cls
+
+union x y | x == y    = return x -- skulle kunna kolla pekar likhet istället
           | otherwise = do
     c <- lift (D.union x y) -- >>= \s -> resetClass s >> return s
     deps <- getDependOnMe c
     fun (S.singleton c) 1 deps
     return c 
-  where
-    fun set depth [] = return () -- ? mm eller ev return set om vi far problem med loopar har
-    fun set depth (cls:classes) | cls `S.member` set = fun set depth classes
-                                | otherwise = do 
-                                    updated cls (Just depth) 
-                                    deps <- getDependOnMe cls
-                                    fun (S.insert cls set) (depth+1) deps
-                                    fun (S.insert cls set) depth classes
+  
+fun :: S.Set (D.EqRepr s) -> Int -> [D.EqRepr s] -> OptMonad s ()
+fun set depth [] = return () -- ? mm eller ev return set om vi far problem med loopar har
+fun set depth (cls:classes) | cls `S.member` set = fun set depth classes
+                            | otherwise = do 
+                                updated cls (Just depth) 
+                                deps <- getDependOnMe cls
+                                fun (S.insert cls set) (depth+1) deps
+                                fun (S.insert cls set) depth classes
 {-
 updateded cls depth = do
     classes <- get

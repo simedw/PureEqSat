@@ -121,15 +121,16 @@ addElem elem rep = do
     Root c r dat <- rootIO rep
     liftIO $ writeIOStableRef rep (Root c r dat { eqSet = S.insert elem (eqSet dat) })
 
+
 getElems :: EqRepr e -> EqMonad e [e]
 getElems x = do
     Root _ _ dat <- rootIO x
     return $ S.toList (eqSet dat)
 
-getClass :: Ord e => e -> EqMonad e (Maybe (EqRepr e))
+getClass :: Ord e => e -> EqMonad e [EqRepr e]
 getClass elem = do
     cls <- getClasses
-    liftM (listToMaybe . concat) $ forM cls $ \c -> do
+    liftM (concat) $ forM cls $ \c -> do
         Root _ _ dat <- rootIO c
         case elem `S.member` eqSet dat of
             True  -> return [c]

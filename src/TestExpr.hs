@@ -25,7 +25,7 @@ printClass :: EqRepr -> Opt ()
 printClass rep = do
     (Root i _ dat) <- lift $ rootIO rep 
     let s = eqSet dat
-    liftIO $ putStrLn $ "[#" ++ show i ++ " (size: " ++ show (S.size s) ++ ")]"
+    liftIO $ putStrLn $ "[#" ++ show i ++ "(depth: " ++ show (depth dat) ++ "),(size: " ++ show (S.size s) ++ ")]"
     forM_ (S.toList s) $ do \(EqExpr e) -> (showTerm e >>= \str -> liftIO $ putStrLn $ "  " ++ str)
     return ()
 
@@ -62,7 +62,7 @@ testExpr expr = runOpt $ do
     mapM_ printClass $ reverse cls
     liftIO $ putStrLn $ "number of classes poeInters: " ++ show (length cls)
     liftIO $ putStrLn "-----------------"
-    replicateM_ 3 $ ruleEngine rules
+    replicateM_ 10 $ ruleEngine rules
     cls <- Opt.getClasses
     mapM_ printClass $ reverse cls
     liftIO $ putStrLn $ "number of classes poeInters: " ++ show (length cls)
@@ -83,9 +83,9 @@ testFileExpr fileName = do
         Left err -> print err
         Right vs -> runOpt $ do
             eq <- translate vs
+            replicateM_ 12 $ ruleEngine rules
             cls <- Opt.getClasses
             mapM_ printClass $ reverse cls
-            replicateM_ 3 $ ruleEngine rules
             m <- liftIO $ newIORef M.empty
             res <- buildExpr m eq
             liftIO $ print res  

@@ -116,10 +116,24 @@ addTerm :: EqExpr -> Opt EqRepr
         Just x -> return x
 -}
 addTerm t = do
-    r <- getClass t
-    case r of
-        Nothing  -> makeClass t
-        Just rep -> return rep
+    rs <- getClassOpt t
+    case rs of
+        []  -> makeClass t
+        (c:cls)  -> foldM union c cls
+
+getClassOpt :: EqExpr -> Opt [EqRepr]
+getClassOpt term = do
+    cls <- getClasses
+    flip filterM cls $ \c -> do
+        anyM (similar term) =<< getElems c
+
+anyM :: Monad m => (a -> m Bool) -> [a] -> m Bool
+anyM p []       = return False
+anyM p (x : xs) = do
+    b <- p x
+    if b
+        then return True
+        else anyM p xs
 
 similar :: EqExpr -> EqExpr -> Opt Bool
 similar (EqExpr (Lit i)) (EqExpr (Lit i')) = return (i == i')
@@ -128,23 +142,29 @@ similar (EqExpr (Add x y)) (EqExpr (Add x' y'))
     = liftM2 (&&) (equivalent x x') (equivalent y y')
 similar (EqExpr (Mul x y)) (EqExpr (Mul x' y')) 
     = liftM2 (&&) (equivalent x x') (equivalent y y')
+similar (EqExpr (Or x y)) (EqExpr (Or x' y')) 
+    = liftM2 (&&) (equivalent x x') (equivalent y y')
+similar (EqExpr (And x y)) (EqExpr (And x' y')) 
+    = liftM2 (&&) (equivalent x x') (equivalent y y')
+similar (EqExpr (Eq x y)) (EqExpr (Eq x' y')) 
+    = liftM2 (&&) (equivalent x x') (equivalent y y')
+similar (EqExpr (If x y z)) (EqExpr (If x' y' z')) 
+    = and `fmap` zipWithM equivalent [x,y,z] [x',y',z']
 similar _ _ = return False
 
 addTermToClass :: EqExpr -> Maybe EqRepr -> Opt EqRepr
 addTermToClass term Nothing    = addTerm term
-addTermToClass term (Just cls) = addTerm term >>= union cls
---addTermToClass term (Just cls) = addTerm term >>= flip union cls
-    {- -- union cls =<< addTerm term
+addTermToClass term (Just cls) = do -- addTerm term >>= union cls
     terms <- getElems cls
     xs <- filterM (similar term) terms
     if null xs
         then do
-            r <- getClass term
+            r <- getClassOpt term
             case r of
-                Nothing -> addElem term cls >> return cls
-                Just cl -> union cl cls
+                [] -> addElem term cls >> return cls
+                cl -> foldM union cls cl
         else return cls
-    -}
+    
 {- old 
         then addElem term cls >> return cls
             -- union cls =<< addTerm term 

@@ -58,9 +58,9 @@ expr = buildExpressionParser table expr'
     table = 
        [ [ "*" --> (*.)]
        , [ "+" --> (+.)]
+       , [ "==" --> (==.)]
        , [ "&&" --> eAnd]
        , [ "||" --> eOr]
-       , [ "==" --> (==.)]
        ]
     name --> op = Infix (reservedOp tok name >> return op) AssocLeft
 
