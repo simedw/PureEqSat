@@ -1,0 +1,32 @@
+\begin{document}
+\section{Implementation}
+In this section we will take a closer look at the different aspects that relate
+to the implementation of the equality saturation. We will start of with how
+we store the classes, and then we will explain how we find the equivalences by 
+the use of axioms. Finaly we talk about how we choose the best representation in
+a given class.
+\subsection{How do we keep track of the classes?}
+To keep track of the the classes we must have an efficient data-structure to store
+them in. The different operations we may perform on classes is of the followin:
+
+\begin{description}
+  \item[makeClass] Given a term, we create a class where it belongs to.
+  \item[union]     Given two classes we may find that they are in fact equal, then
+                   we need to merge them.
+  \item[addElem]   Sometimes we find new terms that we know in which class they
+                   should belong to.
+\end{description}
+
+Due to these requirements we have opted for a union-find structure and acompaning
+algorithms. We have added some structure to it, for example we store all the terms
+in the root node.
+
+* union-find
+* * limitation in ordinary union-find (can't get elements etc)
+\subsection{Pattern-Matching on terms to see find axioms to apply}
+* * looking throw every term for match in the class. (hint callback future work) 
+* dirty-bit work
+  * depth of change in <|
+\subsection{Fitness function}
+* cost-method (kanske theory), dynamic programing delen är implementation.
+\end{document}

@@ -1,0 +1,45 @@
+\begin{document}
+\section{Background}
+When writing an optimiser for a compiler usually we have a lot of different 
+optimisations at mind. For example in a compiler backend you may find peep-hole\cite{peephole}
+optimisations, loop-induction variables\cite{loop-induction} and a plethora of others. In most cases 
+they are orthogonal in how they optimise, and can benefit from each others optimisations.
+
+This is standard wisdom, but the reverse is also true, applying an optimisation
+may destroy an oppurtunity to apply another one. If we take the example of having a 
+term: $ 2 * x $, a peephole optimiser could rewrite this to the better term 
+$ x << 1$. But suppose this term was used in the loop, that the induction variable
+depends on. Then it may not fire that optimisation and the end result is worse.
+
+To circumvent this we must carefully choose in which order we apply the optimisations
+but even with greatest care we can't win. Different programs benefit differntly
+on different orders. This make us search for another approach to apply optimisations
+that don't depend on order. 
+
+The reason for why we failed with the peep-hole case is because when it has applied
+the old version of the code is gone. And because of this destructive update, each
+optimisation perform local checks if it would beneficial in the long run to apply
+or not. These are non-trivial to write, so wouldn't it better to not do destruvtive
+updates at all?
+
+We follow the approach of Equality Saturation\cite{eqSat}, but we do some things
+differently from their paper. The approach is three-fold:
+
+\begin{enumerate}
+  \item Translate the term to our equality-representation.
+  \item Try to apply as many optimisations as possible, but only add new terms and
+        record the equivalence between term.
+  \item Go through the equivalence-graph and pick out the best term.
+\end{enumerate}
+
+The language we work with is a small arithmetical language and we have referential
+transparency which makes it easier for us to reason about the terms. All the optimisations
+we will discuss can be thought of as rewrite rules, and this is why we will hencefor
+call them axioms.
+
+%\section{Related work}
+%pure eq sat, ska vi kolla upp mer? tror det eftersom att dave verkar haj pa sant.
+%oki, vi kan prata lite om Santos och så mm.
+%jag sa att han har forskat pa liknande grejer...
+
+\end{document}

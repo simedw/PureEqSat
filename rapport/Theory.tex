@@ -1,0 +1,93 @@
+\begin{document}
+
+\newcommand{\defBNF}[4] {\text{#1}\quad&#2&::=&\;#3&\text{#4}}
+\newcommand{\defaltBNF}[2] {&&|&\;#1&\text{#2}} 
+
+\section{Theory}
+
+?kanske forst forklara och gora en fin overgang varfor vi har informationen i den ordningen vi har?
+jo kan kanske vara bra
+\subsection{Equivalence classes}
+
+%In this paper we will define a equivalence class to 
+%In this paper we will use the standard equivalence class representation, that is:
+
+A equivalence class \#1 is defined as a set where every element are equvialent under a certain equivalence operator $\sim$. This is usally defined as 
+$y \in\#1 = [y] = \{x \in X : x \sim y\}$.
+
+Our goal is to represent programs using these equivalence class, a natural way to do this is by letting the elements in the classes be programs, and the equivalence relation be equality under some evaluation function eval.
+
+$p1 \sim p2 <=> eval(p1) == eval(p2)$
+
+There are different factors to consider here, p1 or p2 could both generate side effects that eval can't measure or one of them could take forever to compute (1/2 + 1/4 + .... == 1).
+
+say something about pure...
+
+Even without knowing the definition of eval the following property must hold
+%there are some basic properies that we will take advantage of (this must be a requirement to make eval a ~):
+$p_1 == p_2 => eval(p_1) == eval(p_2) <=> p_1 \sim p_2$\footnote{All $\sim$ are reflexive}
+
+
+
+\subsection{Expr}
+
+%To futher our understanding of representating a program as a class we should take a look at a language.
+%To understand how to 
+The next step to representate programs as equivalence classes is to discuss a example language. 
+
+\begin{equation*}
+\begin{aligned}
+\text{Program} \quad & p_1,p_2 \quad & ::= \; \blacksquare \\
+ & & \; | \; p_1 \otimes p_2  & \quad \text{combination} \\
+\end{aligned}
+\end{equation*}
+
+This is a very basic language, with one binary operator $\otimes$ and one 'value` $\blacksquare$. A sample program could look like
+
+$p_1 = \blacksquare \otimes (\blacksquare \otimes \blacksquare)$
+which is not necessarily the same as 
+$p_2 = (\blacksquare \otimes \blacksquare) \otimes \blacksquare$
+without knowing about the evaluation function. 
+We would here create two different eq classes \#1 and \#2 ($p_1 \in \#1$, $p_2 \in \#2$).
+
+This is however not optimal since it is often hard to see if two seemly lagre programs are same from the top, we have to try and divide the programs in smaller parts without losing any information.
+
+This is done by letting every subexpression in Program to be replaced with a class of terms that are all equivalent.
+
+$p_1 = \#3 \otimes \#4$
+$p_2 = \#4 \otimes \#3$
+
+where $(\blacksquare \in \#3)$ and $(\#3 \otimes \#3) \in \#4$
+
+It's now easier to reason about $p_1 \sim p_2$ since all the 'background noise` is gone.
+
+
+big jump
+
+
+\subsection{<|}
+
+\begin{equation*}
+\begin{aligned}
+\#x \lhd \#y \Leftrightarrow \exists (p_1 \otimes p_2) \in \#y &\Rightarrow& p_1 \in \#x \\
+&\vee& p_2 \in \#x \\
+&\vee& \#x \lhd [p_1] \\
+&\vee& \#x \lhd [p_2] \\
+\end{aligned}
+\end{equation*}
+
+Note $[x] = \{0, 0 \otimes 0\}$ gives us $[x] \lhd [x]$
+
+
+* equivalence classes
+* abstrakt model of Expr
+på tal om det, har funderat på om det inte varit smartare (vi kommer inte ändra)
+att ha data TExpr t = Lit Literal | Var String | BinOp BinOp t t | TriOp TriOp t t t
+det hade kunnat göra Rules enklare. Slut parentes. Japp, var abstraka model kan ju se lite ut som det :p
+:)
+* <|
+  * can contain loops
+* monotone fitness function $\forall x,y. x < y ==> f (x + c) < f (y + c)$
+* why saturation is hard (it gets big fast)
+
+\end{document}
