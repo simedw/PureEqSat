@@ -236,16 +236,16 @@ applyPattern pattern cls = do
 
 applyRules :: [(Int, Rule)] -> EqRepr -> Opt ()
 applyRules rules reps = do
-    bs <- mapM apply' rules
-    when (and bs) $ updated reps Nothing
+    dirty <- getDepth reps
+    case dirty of
+       Nothing -> return ()
+       Just d  -> do 
+        bs <- mapM (apply' d) rules
+        when (and bs) $ updated reps Nothing
   where
-    apply' (depth, rule) = do
-        dirty <- getDepth reps
-        case dirty of
-            Nothing -> return True
-            Just d 
-              | d <= depth -> apply rule reps
-              | otherwise -> return True
+    apply' d (depth, rule)
+              | d <= depth = apply rule reps
+              | otherwise = return True
 
 -- applys a set of rules on all classes
 ruleEngine :: [(Int,Rule)] -> Opt ()
