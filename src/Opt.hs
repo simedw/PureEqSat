@@ -71,12 +71,18 @@ addElem x cls = do
     fun (S.singleton cls) 1 deps    
     return cls
 
-union x y | x == y    = return x -- skulle kunna kolla pekar likhet istället
-          | otherwise = do
-    c <- lift (D.union x y) -- >>= \s -> resetClass s >> return s
-    deps <- getDependOnMe c
-    fun (S.singleton c) 1 deps
-    return c 
+union x y 
+  | x == y    = do
+    return x -- skulle kunna kolla pekar likhet istället
+  | otherwise = do
+    b <- equivalent x y
+    if b 
+        then return x
+        else do
+            c <- lift (D.union x y) -- >>= \s -> resetClass s >> return s
+            deps <- getDependOnMe c
+            fun (S.singleton c) 1 deps
+            return c 
   
 fun :: S.Set (D.EqRepr s) -> Int -> [D.EqRepr s] -> OptMonad s ()
 fun set depth [] = return () -- ? mm eller ev return set om vi far problem med loopar har

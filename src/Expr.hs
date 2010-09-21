@@ -71,6 +71,7 @@ type EqRepr = Opt.EqRepr EqExpr
 
 type Opt = OptMonad EqExpr
 
+{-
 addExpr :: Expr -> Opt EqRepr
 addExpr exp = case out exp of
     Lit i    -> addTerm (EqExpr $ Lit i)
@@ -95,7 +96,7 @@ addExpr exp = case out exp of
         c <- addTerm (EqExpr $ op x' y' z')
         c `dependOn` [x',y', z']
         return c
-
+-}
 
 addTerm :: EqExpr -> Opt EqRepr
 {-addTerm t@(EqExpr (Add p1 p2)) = do
@@ -152,10 +153,28 @@ similar (EqExpr (If x y z)) (EqExpr (If x' y' z'))
     = and `fmap` zipWithM equivalent [x,y,z] [x',y',z']
 similar _ _ = return False
 
-addTermToClass :: EqExpr -> Maybe EqRepr -> Opt EqRepr
-addTermToClass term Nothing    = addTerm term
+myUnion :: (Bool, EqRepr) -> EqRepr -> Opt (Bool, EqRepr)
+myUnion (b, x) y = do
+    b' <- equivalent x y
+    if b'
+        then return (b, x)
+        else do
+            c <- union x y
+            return (True, c)
+
+addTermToClass :: EqExpr -> Maybe EqRepr -> Opt (Bool, EqRepr)
+addTermToClass term Nothing    = do
+    rs <- getClassOpt term
+    c' <- case rs of
+        []  -> makeClass term
+        (c:cls)  -> foldM union c cls 
+    return (False, c')
 addTermToClass term (Just cls) = do -- addTerm term >>= union cls
-    terms <- getElems cls
+    r <- getClassOpt term
+    case r of
+        [] -> addElem term cls >> return (True, cls)
+        cl -> foldM myUnion (False, cls) cl
+    {-terms <- getElems cls
     xs <- filterM (similar term) terms
     if null xs
         then do
@@ -164,11 +183,12 @@ addTermToClass term (Just cls) = do -- addTerm term >>= union cls
                 [] -> addElem term cls >> return cls
                 cl -> foldM union cls cl
         else return cls
-    
+    -}
 {- old 
         then addElem term cls >> return cls
             -- union cls =<< addTerm term 
             -- since we already know the class we could just add it directly
         else return cls 
 -}
+
 

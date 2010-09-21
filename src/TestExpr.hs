@@ -55,7 +55,7 @@ showTerm exp = case exp of
 
 testExpr :: Expr -> IO ()
 testExpr expr = runOpt $ do
-    rep <- addExpr expr
+    rep <- translate [("main", expr)]
     p <- poeIntTo rep
     liftIO $  putStrLn $ "rep: #" ++ show p 
     cls <- Opt.getClasses

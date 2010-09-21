@@ -1,5 +1,6 @@
+one = 1
 
-main = x + (x0  * 1) == x0 + x + 0
+main = if x' + x0 == x + x0 then one else 2
 
 {-
 y = if (x + (x0 * 1) == x0 + x + 0) then 1 else  2
@@ -12,3 +13,4 @@ w = 4
 
 main = z * y
 -}
+

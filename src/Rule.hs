@@ -77,6 +77,7 @@ rules = map (\r -> (getRuleDepth r, r)) $
         , forall3 $ \x y z -> rMul x (rAdd y z) ~> rAdd (rMul x y) (rMul x z) -- distr ....
         , forall3 $ \x y z -> rAdd (rMul x y) (rMul x z) ~> rMul x (rAdd y z)
         , forall1 $ \x -> x `rEq` x ~> rTrue
+        , forall3 $ \x y z -> ((x `rAdd` z) `rEq` (y `rAdd` z)) ~> (x `rEq` y)
         , forall2 $ \x y -> rIf (rTrue) x y ~> x
         , forall2 $ \x y -> rIf (rFalse) x y ~> y
         , forall2 $ \x y -> rIf y x x ~> x
@@ -124,7 +125,7 @@ apply (Rule p1 p2) cls = do
     
     list <- mapM (buildPattern (Just cls) p2) $ ma
     --ls <- mapM (union cls) list
-    return $ null list
+    return $ all (not . fst) list
 
 --    mapM_ ls (markDirty
 
@@ -133,7 +134,7 @@ eqRec [] = return True
 eqRec (x:[])   = return True
 eqRec (x:y:xs) = liftM2 (&&) (equivalent x y) (eqRec (y:xs))
 
-buildPattern :: Maybe EqRepr -> Pattern -> [Either (ID, Lit) (ID,EqRepr)] -> Opt EqRepr
+buildPattern :: Maybe EqRepr -> Pattern -> [Either (ID, Lit) (ID,EqRepr)] -> Opt (Bool, EqRepr)
 buildPattern cls p ma = case p of
     PExpr (Lit i) -> addTermToClass (EqExpr $ Lit i) cls
     PExpr (Var x) -> addTermToClass (EqExpr $ Var x) cls
@@ -143,26 +144,27 @@ buildPattern cls p ma = case p of
     PExpr (Or q1 q2)  -> addBinTermToClass Or q1 q2
     PExpr (Eq q1 q2)  -> addBinTermToClass Eq q1 q2
     PExpr (If q1 q2 q3) -> do
-        p1 <- buildPattern Nothing q1 ma
-        p2 <- buildPattern Nothing q2 ma
-        p3 <- buildPattern Nothing q3 ma
+        p1 <- rec q1
+        p2 <- rec q2
+        p3 <- rec q3
         c <- addTermToClass (EqExpr $ If p1 p2 p3) cls
-        c `dependOn` [p1,p2,p3]
+        snd c `dependOn` [p1,p2,p3]
         return c
     PAny i     -> do
         let c = fromJust $ lookup i $ rights ma
-        maybe (return c) (union c) cls
+        maybe (return (False, c)) (myUnion (False, c)) cls
     PLit _ v -> do
         r <- literal v
         c <- addTermToClass (EqExpr $ Lit r) cls
         return c
         
   where
+    rec q = snd `fmap` buildPattern Nothing q ma
     addBinTermToClass op q1 q2 = do
-        p1 <- buildPattern Nothing q1 ma
-        p2 <- buildPattern Nothing q2 ma
+        p1 <- rec q1
+        p2 <- rec q2
         c <- addTermToClass  (EqExpr $ p1 `op` p2) cls
-        c `dependOn` [p1,p2]
+        snd c `dependOn` [p1,p2]
         return c
     literal :: Pattern -> Opt Lit
     literal p = case p of

@@ -1,6 +1,6 @@
 module Translate where
 
-import Expr hiding (addExpr)
+import Expr 
 import Opt hiding (EqRepr)
 
 import Control.Monad
