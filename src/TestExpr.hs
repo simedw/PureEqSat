@@ -62,7 +62,7 @@ testExpr expr = runOpt $ do
     mapM_ printClass $ reverse cls
     liftIO $ putStrLn $ "number of classes poeInters: " ++ show (length cls)
     liftIO $ putStrLn "-----------------"
-    replicateM_ 10 $ ruleEngine rules
+    ruleEngine 10 rules
     cls <- Opt.getClasses
     mapM_ printClass $ reverse cls
     liftIO $ putStrLn $ "number of classes poeInters: " ++ show (length cls)
@@ -83,7 +83,7 @@ testFileExpr fileName = do
         Left err -> print err
         Right vs -> runOpt $ do
             eq <- translate vs
-            replicateM_ 12 $ ruleEngine rules
+            ruleEngine 1200000 rules
             cls <- Opt.getClasses
             mapM_ printClass $ reverse cls
             m <- liftIO $ newIORef M.empty

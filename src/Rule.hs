@@ -234,22 +234,28 @@ applyPattern pattern cls = do
        r2 <- applyPattern q2 p2
        return $ combineConst2 r1 r2    
 
-applyRules :: [(Int, Rule)] -> EqRepr -> Opt ()
+applyRules :: [(Int, Rule)] -> EqRepr -> Opt Bool
 applyRules rules reps = do
     dirty <- getDepth reps
     case dirty of
-       Nothing -> return ()
+       Nothing -> return True
        Just d  -> do 
         bs <- mapM (apply' d) rules
-        when (and bs) $ updated reps Nothing
+        if and bs
+            then do
+                updated reps Nothing
+                return True
+            else return False
   where
     apply' d (depth, rule)
               | d <= depth = apply rule reps
               | otherwise = return True
 
 -- applys a set of rules on all classes
-ruleEngine :: [(Int,Rule)] -> Opt ()
-ruleEngine rules = do
+ruleEngine :: Int -> [(Int,Rule)] -> Opt ()
+ruleEngine n rules | n < 0     = return ()
+                   | otherwise = do
   classes <- getClasses
-  mapM_ (applyRules rules) classes
+  res <- mapM (applyRules rules) classes
+  when (not $ and res) $ ruleEngine (n-1) rules
 
