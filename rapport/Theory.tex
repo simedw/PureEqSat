@@ -17,7 +17,7 @@ $y \in\#1 = [y] = \{x \in X : x \sim y\}$.
 
 Our goal is to represent programs using these equivalence class, a natural way to do this is by letting the elements in the classes be programs, and the equivalence relation be equality under some evaluation function eval.
 
-$p1 \sim p2 <=> eval(p1) == eval(p2)$
+$p1 \sim p2 \equiv eval(p1) = eval(p2)$
 
 There are different factors to consider here, p1 or p2 could both generate side effects that eval can't measure or one of them could take forever to compute (1/2 + 1/4 + .... == 1).
 
@@ -25,7 +25,8 @@ say something about pure...
 
 Even without knowing the definition of eval the following property must hold
 %there are some basic properies that we will take advantage of (this must be a requirement to make eval a ~):
-$p_1 == p_2 => eval(p_1) == eval(p_2) <=> p_1 \sim p_2$\footnote{All $\sim$ are reflexive}
+$p_1 = p_2 \implies eval(p_1) = eval(p_2) \equiv p_1 \sim p_2$\footnote{All $\sim$ are reflexive}
+%They are also Symmetric and Transitive i.e they are an equivalence relation :)
 
 
 

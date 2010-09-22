@@ -19,14 +19,56 @@ them in. The different operations we may perform on classes is of the followin:
 
 Due to these requirements we have opted for a union-find structure and acompaning
 algorithms. We have added some structure to it, for example we store all the terms
-in the root node.
+in the root node. We represent this by the following data:
 
-* union-find
-* * limitation in ordinary union-find (can't get elements etc)
+\begin{verbatim}
+data EqRepr s
+  = Root ID Rank (EqData s)
+  | Node (IORef (EqRepr s))
+\end{verbatim}
+
+Here we can plug in the data we need in the \verb|EqData| data type, we will have
+the elements of this class and also have other \verb|EqRepr| that depend on that
+class. So if $\#x \lhd \#y$ then $\#x$ will store $\#y$ which we use when we update
+$\#x$ to signal that it could be beneficial to check the rules against $\#y$.
+
 \subsection{Pattern-Matching on terms to see find axioms to apply}
 * * looking throw every term for match in the class. (hint callback future work) 
 * dirty-bit work
   * depth of change in <|
-\subsection{Fitness function}
-* cost-method (kanske theory), dynamic programing delen är implementation.
+\subsection{Cost function}
+The final step in our optimisation is to pick out the best term, we do this by
+storing the best represetant from each class. To decide which term that we should
+consider best we have a cost function that given a term gives us a value how
+much it cost to evaluate that function. To simplify further we put the following
+restrictions on it.
+
+\begin{itemize}
+  \item Forall terms $t$, $f(\blacksquare) \le f(t)$
+  \item If $t$ and $t'$ are terms such that $f(t) \le f(t')$ then forall $c$,
+         $f(t \otimes c) \le f(t' \otimes c)$
+\end{itemize}
+
+The first point says that if we have a value we don't need to compute any compound
+expression. The second is requirement is so that we only need to consider the value
+of $f$ for the best value of the subterm, i.e. we only need to check against the
+best representant of the subterms class.
+
+These requirements almost make it possible to solve the problem with using a 
+straight-forward dynamic programming technique. But as we have seen before we can
+have $x \lhd x$ and even worse we can have cycles. The first point helps us in most
+of the $x \lhd x$ but to solve the more general cycles we have opted for a simple 
+solution, this mostly due to time constraints.
+
+When we calculate the result for the differnt classes, we also keep track of all
+the classes we currently are calculating for that aren't finished yet. If we encounter
+a term that depends on one of this classes we simply disregard it. This of course
+is not an optimal solution. What we really would wanna do is put it on the side,
+and when the offending classes have gotten theire priliminary values, we check if
+any of the terms we put on the side would get a better result. In that case we use that
+value and recalculate until we get a fixed point.
+
+We haven't tested the final remark and we don't know if it really will work, but
+is seems reasonable to assume that a fixed point would be found since we only have
+a finite number of combinations of terms and in each iteration we get better representants.
 \end{document}

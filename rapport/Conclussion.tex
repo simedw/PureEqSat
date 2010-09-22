@@ -1,5 +1,22 @@
 \begin{document}
 \section{Conclusion}
+In the result we have seen that this model of doing optimisations can find interesting
+optimisations that are difficult to find using normal optimisations techniques\cite{santos}.
+For example we showed that the following snippet would be optimised to true even
+when we don't know what the values of either $x$ nor $y$ are.
+
+\begin{verbatim}
+x + y == y + x
+\end{verbatim}
+
+This is akin to a proof search, we find terms that are equal by applying axioms
+and we get a proof\footnote{We can only call it a proof if the axioms really are 
+consistent with our equivalence relation.} that $x + y \sim y + x$. This proof
+is used by another proof that says that semantical equal terms will evaluate to 
+True by the == operator in the language.
+
+But since we havn't yet tackled the issue with scope since it contains complications
+with variable-bindings that can flee from the scope. 
 
 * Our language was a bit to simple to show really interesting things?
 * compare our axioms to hard coded rules and why this approch is better/different.
