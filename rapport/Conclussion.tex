@@ -16,14 +16,23 @@ is used by another proof that says that semantical equal terms will evaluate to
 True by the == operator in the language.
 
 But since we havn't yet tackled the issue with scope since it contains complications
-with variable-bindings that can flee from the scope. 
+with variable-bindings that can flee from the scope. So when considering the classes
+we must also take into account in which scope the equivalence is in. We chose not
+to go further into that direction and instead focused on languages that doesn't
+contain variable bindings.
 
-* Our language was a bit to simple to show really interesting things?
-* compare our axioms to hard coded rules and why this approch is better/different.
-* We have shown that in this model we can find optimisations that are not easy
-to find otherwise (x + y == y + x) 
-* We have a fast implementation, for languages that doesn't contain scope 
- + relationalalgebras
- + mathematical formulas (without forall/exists)
- + propositional logic
+There are a couple of languages that fall into this category, we have used a simple
+arithmetical language but more would be possible (and a simple to implement). For
+example simple propositional logic with simple laws to describe equal propositions,
+this could be useful in finding smaller representations for formulas. Similar
+relational algebra could be modeled and used to optimise static queries to databases.
+
+%* Our language was a bit to simple to show really interesting things?
+%* compare our axioms to hard coded rules and why this approch is better/different.
+%* We have shown that in this model we can find optimisations that are not easy
+%to find otherwise (x + y == y + x) 
+%* We have a fast implementation, for languages that doesn't contain scope 
+% + relationalalgebras
+% + mathematical formulas (without forall/exists)
+% + propositional logic
  \end{document}

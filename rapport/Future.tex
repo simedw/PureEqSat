@@ -1,8 +1,31 @@
 \begin{document}
 \section{Future work}
+For future work we would like to be able to have a solution how we should handle
+scope. This is something that would really make this technique more useful for
+optimising real functional languges. Because other than scope it seems to be a 
+really nice fit for functional languages that put alot of effort into having semantics
+that makes it easier to do equality reasoning.
 
-* scope
-* better fitness/value function
-* flow graphs
-* try not to check for rules to apply unnecisary -- callback
+Another direction that would be interesting to investigate further has to do with
+the cost function. Currently we have put requirements on the shape of the cost function
+which made it simpler to compute the best representant. An extension could be that
+when choosing a term from a class, that would be saved into a variable. So the next
+time we need the element from that class we can use the same variable and they would
+share the cost. This makes it difficult because non-local choices can affect how
+the value of a term.
+
+Yet further would be to optimise the pattern matcher, currently it goes through 
+every term in then class and searches for a match. If we instead were able to 
+record the new elements we could save work because we don't have to try to match
+the same term as often. A solution here could be to register callbacks so when a
+term of a certain shape is added to the class we can call the rule that matches with
+the correct terms.
+
+ 
+
+
+%* scope
+%* better fitness/value function
+%* flow graphs
+%* try not to check for rules to apply unnecisary -- callback
 \end{document}

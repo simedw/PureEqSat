@@ -1,5 +1,79 @@
 \begin{document}
-\section{Result}
+\newcommand{\defBNF}[4] {\text{#1}\quad&#2&::=&\;#3&\text{#4}}
+\newcommand{\defaltBNF}[2] {&&|&\;#1&\text{#2}}
+\newcommand{\sepBNF}{\;|\;} 
+\section{Results}
+
+We chose a simple arithmetical language to experiment with, the reason for this
+is that it doesn't contain any constructs that binds variables and is a natural
+fit for reasoning by axioms.
+
+
+\begin{equation*}
+\begin{aligned}
+\defBNF{Literal}{l}{n \sepBNF b}{} \\
+\defBNF{Term}{t}{l \sepBNF t + t \sepBNF t * t \sepBNF t == t \sepBNF t \&\& t
+                 \sepBNF t \| t \sepBNF \text{if } t \text{ then } t \text{ else } t
+                 }{} 
+\end{aligned}
+\end{equation*}
+
+This simple language has the obvious semantic with very natural eval function
+that simply maps each term to the corresponding value that we expect. The axioms
+follows from the mathematical reasoning basically this is how we use the rules
+in our implementation.
+
+\begin{verbatim}
+rules :: [Rule]
+rules = [ assoc    rAdd
+        , assoc    rMul
+        , assoc    rAnd
+        , assoc    rOr
+        , commute  rAdd
+        , commute  rMul
+        , commute  rAnd
+        , commute  rOr
+        , commute  rEq
+        , identity rAdd (rInt 0)
+        , identity rMul (rInt 1)
+        , identity rAnd rTrue
+        , identity rOr  rFalse
+        , zero     rMul (rInt 0)
+        , zero     rAnd rFalse
+        , zero     rOr  rTrue
+
+        , forall3 $ \x y z -> rMul x (rAdd y z) ~> rAdd (rMul x y) (rMul x z)
+        , forall3 $ \x y z -> rAdd (rMul x y) (rMul x z) ~> rMul x (rAdd y z)
+        , forall1 $ \x -> x `rEq` x ~> rTrue
+        , forall3 $ \x y z -> ((x `rAdd` z) `rEq` (y `rAdd` z)) ~> (x `rEq` y)
+        , forall2 $ \x y -> rIf (rTrue) x y ~> x
+        , forall2 $ \x y -> rIf (rFalse) x y ~> y
+        , forall2 $ \x y -> rIf y x x ~> x
+        ]
+
+zero op v     = forall1 $ \x -> (x `op` v) ~> v
+identity op v = forall1 $ \x -> (x `op` v) ~> x
+commute op    = forall2 $ \x y -> (x `op` y) ~> (y `op` x)
+assoc op      = forall3 $ \x y z -> ((x `op` y) `op` z) ~> (x `op` (y `op` z))
+\end{verbatim}
+
+Remember that when we do unification on patterns, we do not check that the terms
+are equal but we check if they relate. So for example the rule $\forall \, x. x == x \leadsto \text{True}$
+should really be seen as $\forall \, x \, y. x \sim y \implies x == y \leadsto \text{True}$.
+So if we can prove that $x$ and $y$ will evaluate to the same value, then the equality
+will evaluate to True. For example, $x + y == y + x$ will be the same as True, even
+if we don't know what $x$ and $y$ are.
+
+It is also worth mentioning that we also have rules for evaluating terms if all
+the subterms are known. So if we see an expression like $7 * 191$ we will say that
+it is equal to the term $1337$. Some of these evaluation rules have been expressed
+in the axioms that was given above.
+
+
+
+
+
+
 * cool examples:  x + y == y + x, show number of rules
 * Some timing of examples.. <- what sort of time should we take?
 -- we can't compare the results against the pre-optimized, we only have our cost function.
