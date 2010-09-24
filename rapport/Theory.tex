@@ -5,14 +5,35 @@
 
 \section{Theory}
 
-?kanske forst forklara och gora en fin overgang varfor vi har informationen i den ordningen vi har?
-jo kan kanske vara bra
+%?kanske forst forklara och gora en fin overgang varfor vi har informationen i den ordningen vi har?
+%jo kan kanske vara bra
+In this section we wil discuss the theory behind equality saturation and the acompaning concepts. We
+start by defining an equivalence that will be used by our axioms. Later we will also define a relation
+that will denote the dependencies of the different classes. This will be useful for us to know where to
+or rather where not to look for terms to apply axioms to.
 \subsection{Equivalence classes}
 
 %In this paper we will define a equivalence class to 
 %In this paper we will use the standard equivalence class representation, that is:
 
+For our purpose we will say that two terms are equal if they evaluate to the same value, i.e the language
+is referentiel transparent. So if two terms $t_1$ and $t_2$ are equal it is safe two exchange an occurence
+of $t_1$ with $t_2$ and vice versa. This leads to this definition of the relation:
+$t_1 \sim t_2 \equiv eval(t_1) = eval(t_2)$
+
+
+Even if we don't know how the eval function is defined we can deduce that $\sim$ is an equivalence relation.
+This because $=$ is an equivalence relation, for example to proof of reflexivity is:
+$p_1 = p_2 \implies eval(p_1) = eval(p_2) \equiv p_1 \sim p_2$
+
+
+
+
+
+
+
 A equivalence class \#1 is defined as a set where every element are equvialent under a certain equivalence operator $\sim$. This is usally defined as 
+
 $y \in\#1 = [y] = \{x \in X : x \sim y\}$.
 
 Our goal is to represent programs using these equivalence class, a natural way to do this is by letting the elements in the classes be programs, and the equivalence relation be equality under some evaluation function eval.
