@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -F -pgmF she #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeOperators #-}
@@ -56,17 +55,37 @@ x ==. y = In (Eq x y)
 eIf p tru fls = In (If p tru fls)
 
 newtype Expr = In { out :: TExpr Expr } deriving (Eq, Ord)
+{-
+ordning vi parsar, alla är left recursive (dock borde kanske inte == vara det)
+       [ [ "*" --> (*.)]
+       , [ "+" --> (+.)]
+       , [ "==" --> (==.)]
+       , [ "&&" --> eAnd]
+       , [ "||" --> eOr]
+-}
 
 instance Show Expr where
-    show v = case out v of
-        Lit i -> show i
-        Var s -> s
-        Add p q -> paren $ show p ++ " + " ++ show q
-        Mul p q -> paren $ show p ++ " * " ++ show q
-        And p q -> paren $ show p ++ " `and` " ++ show q
-        Or  p q -> paren $ show p ++ " `or` " ++ show q    
-        Eq  p q -> paren $ show p ++ " == " ++ show q
-        If p l r -> paren $ "if " ++ paren (show p) ++ " then " ++ show l ++ " else " ++ show r
+    showsPrec p e = case out e of
+        Lit (LInteger i) -> shows i
+        Lit (LBool b)    -> shows b
+        Var x            -> showString x
+        -- osäker på siffrorna :)
+        Add e1 e2  -> showParen (p > 4) $
+            showsPrec 4 e1 . showString " + " . showsPrec 5 e2
+        Mul e1 e2  -> showParen (p > 5) $
+            showsPrec 5 e1 . showString " * " . showsPrec 6 e2
+        And e1 e2  -> showParen (p > 2) $
+            showsPrec 2 e1 . showString " && " . showsPrec 3 e2
+        Or e1 e2  -> showParen (p > 1) $
+            showsPrec 1 e1 . showString " || " . showsPrec 2 e2
+        Eq e1 e2  -> showParen (p > 3) $
+            showsPrec 4 e1 . showString " == " . showsPrec 4 e2
+        If e1 e2 e3  -> showParen (p > 0) $
+            showString "if " . showsPrec 1 e1 
+                             . showString " then " 
+                             . showsPrec 1 e2
+                             . showString " else "
+                             . showsPrec 1 e3
 
 paren :: String -> String
 paren xs = '(':xs ++ ")"
@@ -83,51 +102,7 @@ type EqRepr = Opt.EqRepr EqExpr
 
 type Opt = OptMonad EqExpr
 
-{-
-addExpr :: Expr -> Opt EqRepr
-addExpr exp = case out exp of
-    Lit i    -> addTerm (EqExpr $ Lit i)
-    Var x    -> addTerm (EqExpr $ Var x)
-    Add x y  -> addBinTerm Add x y
-    Mul x y  -> addBinTerm Mul x y
-    And x y  -> addBinTerm And x y
-    Or  x y  -> addBinTerm Or  x y
-    Eq  x y  -> addBinTerm Eq  x y
-    If x y z -> addTriTerm If x y z
-  where
-    addBinTerm op x y = do
-        x' <- addExpr x
-        y' <- addExpr y
-        c <- addTerm (EqExpr $ op x' y')
-        c `dependOn` [x',y']
-        return c
-    addTriTerm op x y z = do
-        x' <- addExpr x
-        y' <- addExpr y
-        z' <- addExpr z
-        c <- addTerm (EqExpr $ op x' y' z')
-        c `dependOn` [x',y', z']
-        return c
--}
-
-{-
-addTerm t@(EqExpr (Add p1 p2)) = do
-    r <- getClass t
-    case r of
-        Nothing -> do classes <- getClasses
-                      eqs <- forM classes $ \c -> do
-                        terms <- getElems c
-                        liftM concat $ forM terms $ \term -> 
-                            case term of
-                                EqExpr (Add q1 q2) -> do 
-                                    b <- liftM2 (&&) (equivalent p1 q1) (equivalent p2 q2)
-                                    if b then return [c] else return []
-                                _         -> return []
-                      case concat eqs of
-                        []    -> makeClass t
-                        (x:xs) -> foldM union x xs--return x
-        Just x -> return x
--}
+-- | add a new term, if the term already exists we will return that term.
 addTerm :: EqExpr -> Opt EqRepr
 addTerm t = do
     rs <- getClassOpt t
@@ -157,7 +132,7 @@ getTermDep term = case unEqExpr term of
 
 getClassOpt :: EqExpr -> Opt [EqRepr]
 getClassOpt term = do
-    cls <- getTermDep term -- getClasses
+    cls <- getTermDep term
     flip filterM cls $ \c -> do
         anyM (similar term) =<< getElems c
 
@@ -210,26 +185,8 @@ addTermToClass term Nothing    = do
         []  -> makeClass term
         (c:cls)  -> foldM union c cls 
     return (False, c')
-addTermToClass term (Just cls) = do -- addTerm term >>= union cls
+addTermToClass term (Just cls) = do
     r <- getClassOpt term
     case r of
         [] -> addElem term cls >> return (True, cls)
         cl -> foldM myUnion (False, cls) cl
-    {-terms <- getElems cls
-    xs <- filterM (similar term) terms
-    if null xs
-        then do
-            r <- getClassOpt term
-            case r of
-                [] -> addElem term cls >> return cls
-                cl -> foldM union cls cl
-        else return cls
-    -}
-{- old 
-        then addElem term cls >> return cls
-            -- union cls =<< addTerm term 
-            -- since we already know the class we could just add it directly
-        else return cls 
--}
-
-

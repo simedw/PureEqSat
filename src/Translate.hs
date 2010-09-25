@@ -21,14 +21,7 @@ translate exprs = do
     case mexps of
         -- should be done more gracefully
         Nothing -> error "Recursive definition of vars"
-        Just exprs' -> do
-        {-
-            addExpr (eInt 0) M.empty
-            addExpr (eInt 1) M.empty
-            addExpr (eInt 0 +. eInt 0) M.empty
-            addExpr (eInt 1 *. eInt 1) M.empty
-        -}
-            addExprs exprs' M.empty
+        Just exprs' -> addExprs exprs' M.empty
             
 addExprs :: [(Var, Expr)] -> Map Var EqRepr -> Opt EqRepr
 addExprs [] gamma = case M.lookup "main" gamma of

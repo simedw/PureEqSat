@@ -1,6 +1,5 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE PackageImports #-}
--- {-# OPTIONS_GHC -F -pgmF she #-}
 module Rule where
 
 import Expr
@@ -75,12 +74,12 @@ rules = map (\r -> (getRuleDepth r, r)) $
         , zero rMul (rInt 0)
         , zero rAnd (rFalse)
         , zero rOr  (rTrue)
-{-
+
         , eval (rAdd `on` pInt)  plus pInt
         , eval (rMul `on` pInt)  mul pInt
         , eval (rEq  `on` pInt)  eqI pBool
         , eval (rEq  `on` pBool) eqB pBool
--}
+
         , forall3 $ \x y z -> rMul x (rAdd y z) ~> rAdd (rMul x y) (rMul x z) -- distr ....
         , forall3 $ \x y z -> rAdd (rMul x y) (rMul x z) ~> rMul x (rAdd y z)
         , forall1 $ \x -> x `rEq` x ~> rTrue
@@ -88,7 +87,6 @@ rules = map (\r -> (getRuleDepth r, r)) $
         , forall2 $ \x y -> rIf (rTrue) x y ~> x
         , forall2 $ \x y -> rIf (rFalse) x y ~> y
         , forall2 $ \x y -> rIf y x x ~> x
---        , forall4 $ \x y z a -> a `op` (rIf y x z) ~> rIf y (x `op` y) (z `op` y)
         ] 
 
 zero op v     = forall1 $ \x -> (x `op` v) ~> v
@@ -218,137 +216,24 @@ applyPattern pattern cls = do
             
  where
     combine2 p1 p2 q1 q2 = do
-       p1 <- root p1
-       p2 <- root p2
-       r1 <- applyPattern q1 p1 
-       r2 <- applyPattern q2 p2
-       return $ combineConst2 r1 r2    
-
-applyPattern' :: Pattern -> EqRepr -> [[Either (ID, Lit) (ID, EqRepr)]]
-              -> Opt [[Either (ID, Lit) (ID,EqRepr)]]
-applyPattern' _ _ [] = return []
-applyPattern' pattern cls con = do 
-    elems <- getElems cls
-    case pattern of
-        PExpr (Lit i) -> do
-            b <- forM elems $ \rep -> case rep of 
-                EqExpr (Lit l) | i == l -> return  $ i == l
-                _              -> return False
-            if or b
-                then return con
-                else return []
-        --liftM catMaybes $ forM elems $ \rep -> case rep of
-        --    EqExpr (Lit l) | i == l -> return  $ Just con
-        --    _              -> return Nothing
-
---        PExpr (Var x) -> liftM catMaybes $ forM elems $ \rep -> case rep of
---            EqExpr (Var y) | x == y -> return  $ Just [] -- fixar sedan
---            _              -> return Nothing
-{-
-        PExpr (Add q1 q2) -> do
-            pos <- liftM concat $ forM elems $ \rep -> case rep of
-                EqExpr (Add p1 p2) -> do
-                    b <- equivalent p1 cls
-                    b' <- equivalent p2 cls
-                    if b || b'
-                        then return []
-                        else return [(p1, p2)]
-                _                  -> return []
-            liftM (concat) $ forM pos $ \(p1, p2) -> do
-                con' <- applyPattern' q1 p1 con
-                applyPattern' q2 p2 con'
-        PExpr (Eq q1 q2) -> do
-            pos <- liftM concat $ forM elems $ \rep -> case rep of
-                EqExpr (Eq p1 p2) -> do
-                    b <- equivalent p1 cls
-                    b' <- equivalent p2 cls
-                    if b || b'
-                        then return []
-                        else return [(p1, p2)]
-                _                 -> return []
-            liftM (concat) $ forM pos $ \(p1, p2) -> do
-                con' <- applyPattern' q1 p1 con
-                applyPattern' q2 p2 con'
--}
-        PExpr (Add q1 q2) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
-            EqExpr (Add p1 p2) -> combine2 p1 p2 q1 q2 
-            _ -> return Nothing
-        PExpr (Mul q1 q2) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
-            EqExpr (Mul p1 p2) -> combine2 p1 p2 q1 q2
-            _ -> return Nothing
-        PExpr (And q1 q2) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
-            EqExpr (And p1 p2) -> combine2 p1 p2 q1 q2
-            _ -> return Nothing
-        PExpr (Or q1 q2) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
-            EqExpr (Or p1 p2) -> combine2 p1 p2 q1 q2
-            _ -> return Nothing
-        PExpr (Eq q1 q2) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
-            EqExpr (Eq p1 p2) -> combine2 p1 p2 q1 q2
-            _ -> return Nothing
-        PExpr (If q1 q2 q3) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
-            EqExpr (If p1 p2 p3) -> do
-                r1 <- applyPattern' q1 p1 con
-                r2 <- applyPattern' q2 p2 r1
-                fmap Just $ applyPattern' q3 p3 r2
-              
-            _ -> return Nothing
-        -- -}
-        PAny i -> liftM catMaybes $ forM con $ \c -> do
-            (i,cls) `addConstraint` c
-        
-        PLit (LInteger _) (PAny i) -> liftM catMaybes $ forM elems $ \rep -> case rep of
-            EqExpr (Lit l@(LInteger _)) -> return  $  Just [Left (i,l)]
-            _              -> return Nothing
-        PLit (LBool _) (PAny i) -> liftM catMaybes $ forM elems $ \rep -> case rep of
-            EqExpr (Lit l@(LBool _)) -> return  $  Just [Left (i,l)]
-            _              -> return Nothing
-        _ -> return []
- where
-    combine2 p1 p2 q1 q2 = do
        b <- equivalent p1 cls
        b' <- equivalent p2 cls
        if b || b'
             then return Nothing
             else do
-        p1 <- root p1
-        p2 <- root p2
-        r1 <- applyPattern' q1 p1 con
-        fmap Just $ applyPattern' q2 p2 r1
-    -- gå igenom via rekursion? är lite lagg. :p
-    -- vi borde retunera Maybe hur eller hur, sedan köra catMaybe se ovan #253
+              p1 <- root p1
+              p2 <- root p2
+              r1 <- applyPattern q1 p1 
+              r2 <- applyPattern q2 p2
+              return $ combineConst2 r1 r2    
 
-    --da kan vi gora det super enkelt, antingen Just v eller Nothing 
-    --                                  v-- borde vara en type Constraint =.. :) hade det tidigare, vet inte varfor jag tog bort den, andrade mig hela tiden hur den skulle se up 
-    -- tar vi verkligen in en lista av listor? vi tar val bar in ett constraint
-    addConstraint :: (ID, EqRepr) -> [Either (ID, Lit) (ID,EqRepr)] -> Opt (Maybe [Either (ID,Lit) (ID,EqRepr)])
-    v@(i, cls) `addConstraint` [] = return $ Just [Right v]  
-    v@(i, cls) `addConstraint` (Right v'@(i',cls'):xs) 
-      | i == i' = do
-        b <- trace ("equivalent test") $ equivalent cls cls'
-        if not b
-          then return Nothing
-          else return $ Just (Right v' :xs)
-    v `addConstraint` (v':xs) = do
-        xs' <- addConstraint v xs
-        return $ maybe Nothing (Just . (v':)) xs' -- ful :p
 
 
 -- returns True when it matched
 apply :: Rule -> EqRepr -> Opt Bool
 apply (Rule p1 p2) cls = do
-    ma <- applyPattern' p1 cls [[]] 
-    ma' <- forM ma $ \xs ->
-        forM xs $ \x -> case x of
-            Left y -> return $ Left y
-            Right (i,cls) -> do
-                cls' <- getPtr cls
-                return $ Right (i, cls')
-    liftIO $ print ma'
-    -- TODO: check so if id maps to two different things in ma, that they are equal
-    -- TODO: check if the code works :)
-    --trace ("apply: " ++ show ma) $ return ()
-    -- ma :: [ [ Either (ID, Lit) (ID, EqRepr) ] ]
-    {-
+    ma <- applyPattern p1 cls -- [[]] 
+
     ma <- filterM (\l -> do 
         let same :: [ [EqRepr] ]
             same = map (map  snd) 
@@ -357,12 +242,9 @@ apply (Rule p1 p2) cls = do
 
         liftM and $ mapM eqRec same
         ) ma
-     -}
-    --liftM null $ mapM (buildPattern' cls p2) ma
 
-    -- the fst of the list is True if the class has changed
     list <- mapM (buildPattern (Just cls) p2) ma
-    --ls <- mapM (union cls) list
+
     -- we should return True something has changed
     return $ any fst list
 
@@ -373,8 +255,7 @@ applyRules rules reps = do
     case dirty of
        Nothing -> return False
        Just d  -> do 
-        -- bs <- mapM (apply' d) rules
-        bs <- zipWithM (\i r -> do liftIO $ putStrLn $ "rule: " ++ show i ;apply' d r) [1..] rules
+        bs <- mapM (apply' d) rules
         if all not bs
             then do
                 updated reps Nothing

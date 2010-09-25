@@ -7,17 +7,16 @@ import Control.Monad
 import "mtl" Control.Monad.State
 
 import Data.IOStableRef
---import Data.IOStableRef
 import Data.Maybe (listToMaybe)
 import qualified Data.Set as S
 import Data.Set (Set)
 import Test.QuickCheck
 
 newtype IOSet s a = IS { runLS :: StateT (IState s) IO a }
-    deriving (MonadState (IState s), Monad, MonadIO)
+    deriving (MonadState (IState s), Monad, MonadIO, Functor)
 
 data IState s = IState
-    { classes :: [EqRepr s] -- Only pointer to Root elems!
+    { classes :: [EqRepr s] -- Only pointers to Root elems!
     , number  :: CompareType
     }
 
@@ -26,19 +25,20 @@ type EqMonad = IOSet
 type EqRepr s = IOStableRef (MinEqRepr s)
 
 type Depth = Int
-type Rank = Int
+type Rank  = Int
 type CompareType = Int
 data MinEqRepr s 
   = Root CompareType Rank (EqData s)
   | Node (EqRepr s)
 
 data EqData s = EqData
-    { eqSet  :: (Set s)
-    , eqDependOnMe :: [EqRepr s]
-    , eqIDependOn  :: Set (EqRepr s)
-    , depth :: Maybe Depth
+    { eqSet  :: (Set s)              -- ^ terms
+    , eqDependOnMe :: [EqRepr s]     -- ^ if we are x then list of y such as x <| y 
+    , eqIDependOn  :: Set (EqRepr s) -- ^ if we are x then list of y such as y <| x
+    , depth :: Maybe Depth  -- ^ if we are x then min n such that y <|^n x, where y has changed
     }
 
+-- | Union for the EqData, will also set depth to zero
 unionFunction :: Ord s => EqData s -> EqData s -> EqMonad s (EqData s)
 unionFunction x y = do
     mdeps <- nubClasses (eqDependOnMe x ++ eqDependOnMe y)
@@ -57,7 +57,8 @@ makeData s = EqData
     , depth        = Just 0
     }
 
-root :: EqRepr s -> IOSet s (EqRepr s)
+-- | Returns a pointer to a root node for a given class
+root :: EqRepr s -> EqMonad s (EqRepr s)
 root rep = do
     v <- liftIO $ readIOStableRef rep
     case v of
@@ -67,12 +68,14 @@ root rep = do
             liftIO $ writeIOStableRef rep (Node r)
             return r
 
-rootIO :: EqRepr s -> IOSet s (MinEqRepr s)
+-- | Returns a root node for a given class
+rootIO :: EqRepr s -> EqMonad s (MinEqRepr s)
 rootIO rep = do
     ioroot <- root rep
     liftIO $ readIOStableRef ioroot
 
-makeClass :: eqElem -> IOSet eqElem (EqRepr eqElem)
+-- | Creates a new class with one term in it.
+makeClass :: eqElem -> EqMonad eqElem (EqRepr eqElem)
 makeClass elem = do
     nr <- gets number
     v <- liftIO $ newIOStableRef (Root nr 0 (makeData elem))
@@ -81,18 +84,20 @@ makeClass elem = do
                       }
     return v
 
-equivalent :: EqRepr e -> EqRepr e -> IOSet e Bool
+-- | Checks if two classes are equivalent in other words pointing 
+--   to the same root node
+equivalent :: EqRepr e -> EqRepr e -> EqMonad e Bool
 equivalent x y = do
     (Root cx _ _) <- rootIO x
     (Root cy _ _) <- rootIO y
     return (cx == cy)
 
-
-union :: Ord e => EqRepr e -> EqRepr e -> IOSet e (EqRepr e)
+-- | Combine two classes to create a new one, the old class pointers will
+--   point forward the new class.
+union :: Ord e => EqRepr e -> EqRepr e -> EqMonad e (EqRepr e)
 union iox ioy = do
     (Root xc xrank xdata) <- rootIO iox
     (Root yc yrank ydata) <- rootIO ioy
-    --liftIO $ putStrLn $ "union #" ++ show xc ++ " #" ++ show yc ++ "(" ++ show xrank ++ "," ++ show yrank ++ ")"
     case (xrank > yrank, xrank < yrank, xc /= yc) of
         (True , _   , _   ) -> iox `setRootTo` ioy
         (False,True , _   ) -> ioy `setRootTo` iox
@@ -100,7 +105,7 @@ union iox ioy = do
         _                   -> return iox
   where
     -- make y the root of x
-    setRootTo :: Ord e => EqRepr e -> EqRepr e -> IOSet e (EqRepr e)
+    setRootTo :: Ord e => EqRepr e -> EqRepr e -> EqMonad e (EqRepr e)
     setRootTo x y = do
         x <- root x
         y <- root y
@@ -118,6 +123,7 @@ union iox ioy = do
         liftIO $ writeIOStableRef x (Root c (rank + 1) dat)
         return x
 
+-- | Adds a new term to a given class and updates the depth
 addElem :: Ord e => e -> EqRepr e -> EqMonad e ()
 addElem elem rep = do
     rep <- root rep
@@ -125,12 +131,14 @@ addElem elem rep = do
     liftIO $ writeIOStableRef rep (Root c r dat { eqSet = S.insert elem (eqSet dat) 
                                                 , depth = Just 0})
 
-
+-- | Get all terms from a given class.
 getElems :: EqRepr e -> EqMonad e [e]
 getElems x = do
     Root _ _ dat <- rootIO x
     return $ S.toList (eqSet dat)
 
+-- | Given a term, check which classes it belongs to, notice that this function
+--   is not really reliable and you should use other methods.
 getClass :: Ord e => e -> EqMonad e [EqRepr e]
 getClass elem = do
     cls <- getClasses
@@ -140,6 +148,7 @@ getClass elem = do
             True  -> return [c]
             False -> return []
 
+-- | Get all classes that exists in this graph
 getClasses :: EqMonad e [EqRepr e]
 getClasses = do
     cls <- gets classes
@@ -155,7 +164,8 @@ getClasses = do
                        | otherwise        -> liftM (cls :) $  fun classes (S.insert c set)
             _ -> fun classes set
 
-
+-- | Given a list of classes, update all pointers and make sure you only have one
+--   pointer to each class.
 nubClasses :: [EqRepr e] -> EqMonad e [EqRepr e]
 nubClasses cls = fun cls S.empty
   where
@@ -167,26 +177,8 @@ nubClasses cls = fun cls S.empty
             Root c _ _ | c `S.member` set -> fun classes set
                        | otherwise        -> liftM (cls :) $  fun classes (S.insert c set)
 
-   
-   {-
-getClasses = do
-    cls <- gets classes
-    ls <- flip filterM cls $ \c -> do
-        eq <- liftIO $ readIOStableRef c
-        case eq of
-            Root _ _ _ -> return True
-            _          -> return False
-    modify $ \s -> s { classes = ls}
-    return ls
--}
-
-
--- ps <| p
--- ska den har satta at bada hallen?
--- mm, funderar på om man ska ändra så att Root har speciell datatyp för all sin
--- data som den sparar. Så att man kan ha en withRoot :: (Data -> (Data,a)) -> EqRepr -> Opt a 
--- kanske blir skoj
-
+  
+-- | For a class x gives all y such that x <| y
 getDependOnMe :: EqRepr e -> EqMonad e [EqRepr e]
 getDependOnMe rep = do
     rep <- root rep
@@ -194,8 +186,9 @@ getDependOnMe rep = do
     mdeps <- nubClasses (eqDependOnMe dat)
     liftIO $ writeIOStableRef rep $ Root c r dat { eqDependOnMe = mdeps }
     return mdeps
-    --liftM (\(Root _ _ dat) -> eqDependOnMe dat) . rootIO
 
+-- | Make a class depend on a bunch of other classes, setsup the <| relation in
+--   both ways
 dependOn :: EqRepr e -> [EqRepr e] -> EqMonad e ()
 p `dependOn` ps = do
     p <- root p
@@ -206,22 +199,26 @@ p `dependOn` ps = do
         Root cd rd dat <- rootIO dep
         liftIO $ writeIOStableRef dep $ Root cd rd dat { eqDependOnMe = p : eqDependOnMe dat }
 
-
+-- | Set the depth, if the class doesn't have a depth currently set it unconditionally
+--   otherwise set it to the smallest value (unless you set it to Nothing in which
+--   case you mean that it has no more changes). 
 updated :: EqRepr e -> Maybe Depth -> EqMonad e ()
 updated cls deep = do
     cls <- root cls
     Root a b dat <- rootIO cls
-    -- om den i dat är Nothing ska vi sätta den högra annars sätta min såvida inte depth är nothing
     let dat' = case depth dat of
          Nothing -> dat { depth = deep }
          Just de -> dat { depth = liftM (min de) deep } -- :)
     liftIO $ writeIOStableRef cls $ Root a b dat'
 
+-- | Given an class, tell how far you must go down depenencies for the class to
+--   have been changed, Nothing says no changes.
 getDepth :: EqRepr s -> EqMonad s (Maybe Depth)
 getDepth reps = do
     Root _ _ dat <- rootIO reps
     return $ depth dat
 
+-- | The run function for EqMonad
 runEqClass :: EqMonad e a -> IO a
 runEqClass m = evalStateT (runLS m) $ IState { classes = [], number = 0 }
 
@@ -289,143 +286,3 @@ runTest = do
 
 instance Testable b => Testable (IOSet a b) where
    property b = property $ runEqClass b 
-
-
-{-
-interface
-    ( EqMonad
-    , EqRepr
-    , makeClass  -- :: EqElem                   -> m (EqRepr m)
-    , equivalent -- :: EqRepr       -> EqRepr m -> m Bool
-    , union      -- :: EqRepr       -> EqRepr m -> m (EqRepr m)
-    , getElems   -- :: EqRepr                   -> m [EqElem m]
-    , getClass   -- :: Eq (EqElem m) => EqElem m -> m (Maybe (EqRepr m))
-    , getClasses -- :: m [EqRepr]
-    , runEqClass -- :: m a -> a
--}
-{-
--- fast det är inte samma s detta s är TExpr ,, medan i STRef så är det en phantom type
--- vi kan fortfarande ha den till Int och ha att mappen är till IOStableRef (Set s)
-
--- det viktigaste ar att EqRepr som lamnar IOSetA aldrig kan peka pa nagot an en direkt klass. annars blir det jobbig bookkeeping tror jag
-
--- mm vi vill ha en unionfind slags grej, dar har vi en pekare till en specific term. och med hjalp av den kan vi hitta klassrep termen
--- problemet är att vi inte har alla termer i klassen då, samt att vi kanske inte 
--- kan ha EqRepr utan en parameter
-
--- vi kanske kan overleva att EqRepr har en param
--- jo men vi bör nog tänka på det innan vi ändrar, dock kommer ListSet fortfarande fungera
--- I think iaf, så vi har kanske inte för mycket att förlora
--- isf för att få alla element i UF så kanske de kan sparas i motsvarigheten till Point (i den modulen)
--- vilket jag tror är vad vår EqRepr är..
--- vad menas med en point nu? med Point menar jag datatypen Point i UF.hs
--- Point Value Rank Parent, ranken används när man slår ihop union
--- for att fa log aktig complex ... hade glomt det.
-jepp gillar att vi skriver i kommentarer för att det ska vara gilitig syntax :p
-:)
-
-fragan ar om den har typen av trad ar en bra modell att arbeta i i haskell.
-exakt vad menar du med modell, interface eller faktum att vi gör union-find grejen?
-well vårat interface är ganska imperativt redan och jag tycker inte den skriker c
-algoritmen är fin så kan inte vara c :) 
-det finns persistent varianter av uf som är pure och samma komplexitet
-
-unionfind, den skriker ju c . Men du tror du kan fa ut alla element i en klass givet en pekare till en av termerna?
-
-ja varje term innehåller alla sina barns termer. sa en dubble lankad lista typ..
-hmm blir det det? om bara rotelement har barnen, eller det fungerar inte..
-
-Vi har tre sorters EqRepr ::= Root | Element som pekar på rot | element som pekar på annat
-
-kanske man kan se som tva?
-
-
-tänkte att element som pekar på rot skulle haft möjlighet att ge rot elementet sina
-barn medan de andra elementen inte haft den chansen. Så rot elementen måste förutom
-Set av termer också ha under EqRepr som ännu inte gett barn som den får gå igenom.
-Does that make sense? en optimering?
-
-hmm ja kanske :) vi har två val
-
-eller jag kanske blandar ihop properties, 
-   y
- /   \
-x     x'  vi kan nog ha invarianten att barn till y (x samt x') har lämnat sina termer
-|
-z
-
-till y, men de behöver inte ha gjort pathreduction, alltså z har gett till x som
-gett till y. Men z behöver inte peka på y (än) vilket gör det enklare i think.
-
-vi kommer bara ta union av rot elemen (hittar rötter först) så om det bara är de
-som har termerna så kommer det elementet som är rot att kunna ärva den andras termer
-och den andra blir en vanlig medlem :p
-type CompareType = Int -- unqiue ? japp  ... okej för varje makeClass
-
-data EqRepr s= Root CompareType Rank (Set s) | Node (STRef (EqRepr s))
-Int är för att jämföra == mellan klasser, rank får komma in någonstanns också
-
-men om jag forstar din algorithm korrekt sa kommer alla barn till Rooten pusha upp sig sjalva  till rootens set? mm makeClass kommer skapa rot element, och enda sättet att slå ihop är via
-union, och då, borde faktiskt fungera bra :) men da behover vi en gora nagot speciellt for noder som pekar pa root i skillnad mot noder som pekar pa allmana noder. 
-Tror inte vi behöver det, vad tänker du på? rad 54
-ahh nu har jag slagit ihop element som pekar på stuff till en, bra, lattare att fatta.
-för alla element som pekar på något annat har redan lämnat sina termer så behöver
-inte göra den skillnaden längre
-
-"I don't remember you looking any better, but then again I don't remember you"
-grymt bra låt :p Who says med John Mayer har inte hort
-
-den är inte så bra, mer att jag tyckte det lät roligt för jag tror inte man ska ta det
-som skämt :p
-
-Egentligen har vi samma sak som innan med Left fast nu kan vi uppdatera det vardet och gora path reduction utanfor IOSetA.hs.
-
-mm det är nog samma sak ja fast bättre ;) mest att jag trode det skulle bli mer annorlunda :p 
-hehe
-
-men i var state har vi en lista pa Root element.
-ahh visst det glömde jag bort och tänka på men ja det borde fungera :)
-maste bara tanka pa att bort saker som inte langre ar rotter.
-mm vi kan någon slags collection där och sedan filtrerar man bort alla som inte är
-rot och sparar innan man retunerar
-
-om man kollar pa data typen for EqRepr som du gjorde innan, med den kan vi inte gora path reduction sa langt som direct till Rooten, maste alltid vara Node (Root)
-
-hmm du vill ha något i stil med EqRepr = IOStableRef MinEqRepr, där Min är det jag definera på 81
-tror du inte det hade varit battre?
-Jo jag ser en poäng med det
-
-Just nu kanns det som vi slagit ut de flesta bucklorna :P sa kanske dags att se om det fungerar :D
-du menar i praktiken? ;)
-iaf i en simulering
-Jag tycker verkligen vi borde ha quickcheck egenskaper pa allt!
-
-
-equivalent (Root c1 _ _) (Root c2 _ _) = return (c1 == c2)
-equivalent (Node s     ) x             = getRoot.... precis
-
- function Union(x, y)
-     xRoot := Find(x)
-     yRoot := Find(y)
-     if xRoot.rank > yRoot.rank  
-         yRoot.parent := xRoot// lägg till de EqRepr som pekar till y till x, lägg till barn av y till x
-                              , lägg inte till y som pekare till x
-     else if xRoot.rank < yRoot.rank
-         xRoot.parent := yRoot
-     else if xRoot != yRoot // Unless x and y are already in same set, merge them
-         yRoot.parent := xRoot
-         xRoot.rank := xRoot.rank + 1
-
-
-
-union x y
-    x' <- root x
-    y' <- root y
-    child = S.union (child x') (child y')
-    uf stuff ..
-    setChild x' Nothing
-
-
--}
-
-
