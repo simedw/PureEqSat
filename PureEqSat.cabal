@@ -10,7 +10,7 @@ Name:                PureEqSat
 Version:             0.1
 
 -- A short (one-line) description of the package.
--- Synopsis:            
+-- Synopsis: Implementing equality saturation of a very small pure language           
 
 -- A longer description of the package.
 -- Description:         

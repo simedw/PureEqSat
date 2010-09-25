@@ -24,11 +24,14 @@ sample = Sample
 
 main = do
     cmd <- cmdArgs sample
-    res <- testFileExpr (filename cmd)
-                                  (max_iterations cmd)
-                                  (show_classes cmd)
-    case res of
-        Left err -> putStrLn $ "Error: " ++ err
-        Right (score, expr) -> do
-            print expr
-            when (cost cmd) $ putStrLn ("Cost: " ++ show score)
+    if filename cmd == "" 
+     then putStrLn "Error: need a file to optimise, hint ./PureEqSat -f test.code"
+     else do
+        res <- testFileExpr (filename cmd)
+                                      (max_iterations cmd)
+                                      (show_classes cmd)
+        case res of
+            Left err -> putStrLn $ "Error: " ++ err
+            Right (score, expr) -> do
+                print expr
+                when (cost cmd) $ putStrLn ("Cost: " ++ show score)
