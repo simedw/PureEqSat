@@ -1,14 +1,18 @@
 \begin{document}
 
-\newcommand{\defBNF}[4] {\text{#1}\quad&#2&::=&\;#3&\text{#4}}
-\newcommand{\defaltBNF}[2] {&&|&\;#1&\text{#2}} 
+
 
 \section{Theory}
 
 %?kanske forst forklara och gora en fin overgang varfor vi har informationen i den ordningen vi har?
 %jo kan kanske vara bra
 In this section we wil discuss the theory behind equality saturation and the acompaning concepts. We
-start by defining an equivalence that will be used by our axioms. Later we will also define a relation
+start by defining an equivalence for our language that will be used by our axioms.
+This allows us to save space since instead of storing the subterms to a term, we
+store the equivalence class of those subterms. This allows us to represent a wide 
+variety of different combinations of terms efficiently.
+
+We will also define a relation
 that will denote the dependencies of the different classes. This will be useful for us to know where to
 or rather where not to look for terms to apply axioms to.
 \subsection{Equivalence classes}
@@ -24,30 +28,24 @@ $t_1 \sim t_2 \equiv eval(t_1) = eval(t_2)$
 
 Even if we don't know how the eval function is defined we can deduce that $\sim$ is an equivalence relation.
 This because $=$ is an equivalence relation, for example to proof of reflexivity is:
-$p_1 = p_2 \implies eval(p_1) = eval(p_2) \equiv p_1 \sim p_2$
+$eval(t) = eval(t) \equiv t \sim t$.
+
+
+Usually we will talk about classes instead of individual terms, these classes will
+be named as \#1, \#2 and so forth. This corresponds to the usual definition by
+$y \in \#1 = [y] = \{ x : x \sim y\}$. This gives us the insight that we should
+not merly note that two terms are equal, but we should merge the two differnt classes.
+For example if $x + y \in \#1$ and $y + x \in \#2$ then the axiom of commutitativity
+states that the classes \#1 and \#2 really are the same and should be merged.
 
 
 
 
 
+%There are different factors to consider here, p1 or p2 could both generate side effects that eval can't measure or one of them could take forever to compute (1/2 + 1/4 + .... == 1).
 
+%say something about pure...
 
-A equivalence class \#1 is defined as a set where every element are equvialent under a certain equivalence operator $\sim$. This is usally defined as 
-
-$y \in\#1 = [y] = \{x \in X : x \sim y\}$.
-
-Our goal is to represent programs using these equivalence class, a natural way to do this is by letting the elements in the classes be programs, and the equivalence relation be equality under some evaluation function eval.
-
-$p1 \sim p2 \equiv eval(p1) = eval(p2)$
-
-There are different factors to consider here, p1 or p2 could both generate side effects that eval can't measure or one of them could take forever to compute (1/2 + 1/4 + .... == 1).
-
-say something about pure...
-
-Even without knowing the definition of eval the following property must hold
-%there are some basic properies that we will take advantage of (this must be a requirement to make eval a ~):
-$p_1 = p_2 \implies eval(p_1) = eval(p_2) \equiv p_1 \sim p_2$\footnote{All $\sim$ are reflexive}
-%They are also Symmetric and Transitive i.e they are an equivalence relation :)
 
 
 
@@ -55,61 +53,96 @@ $p_1 = p_2 \implies eval(p_1) = eval(p_2) \equiv p_1 \sim p_2$\footnote{All $\si
 
 %To futher our understanding of representating a program as a class we should take a look at a language.
 %To understand how to 
-The next step to representate programs as equivalence classes is to discuss a example language. 
+%The next step to representate programs as equivalence classes is to discuss a example language. 
+
+Let us give an example of how terms may be represented with classes, suppose the
+language was the following:
 
 \begin{equation*}
 \begin{aligned}
-\text{Program} \quad & p_1,p_2 \quad & ::= \; \blacksquare \\
- & & \; | \; p_1 \otimes p_2  & \quad \text{combination} \\
+\text{Term} \quad & t_1,t_2 \quad & ::= \; \val & \\
+ & & \; | \; t_1 \op t_2  & \quad \text{Compound expression} \\
 \end{aligned}
 \end{equation*}
 
-This is a very basic language, with one binary operator $\otimes$ and one 'value` $\blacksquare$. A sample program could look like
+This is a very basic language, with one binary operator $\op$ and one 'value` $1$. 
+A sample term could look like
+$t_1 = \val \op (\val \op \val)$
+which isn't necessarily the same as 
+$t_2 = (\val \op \val) \op \val$
+without knowing more about the evaluation function.
+So we need to assume that they are different and creates two different equivalence
+classe \#1 and \#2 ($t_1 \in \#1$, $t_2 \in \#2$).
 
-$p_1 = \blacksquare \otimes (\blacksquare \otimes \blacksquare)$
-which is not necessarily the same as 
-$p_2 = (\blacksquare \otimes \blacksquare) \otimes \blacksquare$
-without knowing about the evaluation function. 
-We would here create two different eq classes \#1 and \#2 ($p_1 \in \#1$, $p_2 \in \#2$).
+This is however not optimal since the subterm ($\val \op \val$) exists
+in both the term of the different classes. This is a waste of space and if were to
+learn som information about that term it would only apply to one of the classes,
+even though both could potentially benefit from it. 
 
-This is however not optimal since it is often hard to see if two seemly lagre programs are same from the top, we have to try and divide the programs in smaller parts without losing any information.
+%it is often hard to see if two seemly lagre programs are same from the top, we have to try and divide the programs in smaller parts without losing any information.
 
-This is done by letting every subexpression in Program to be replaced with a class of terms that are all equivalent.
-
-$p_1 = \#3 \otimes \#4$
-$p_2 = \#4 \otimes \#3$
-
-where $(\blacksquare \in \#3)$ and $(\#3 \otimes \#3) \in \#4$
-
-It's now easier to reason about $p_1 \sim p_2$ since all the 'background noise` is gone.
-
-
-big jump
-
-
-\subsection{<|}
+Instead every subexpression in term is to be replaced with a class of terms that are all equivalent.
+So for example the above terms:
 
 \begin{equation*}
 \begin{aligned}
-\#x \lhd \#y \Leftrightarrow \exists (p_1 \otimes p_2) \in \#y &\Rightarrow& p_1 \in \#x \\
-&\vee& p_2 \in \#x \\
-&\vee& \#x \lhd [p_1] \\
-&\vee& \#x \lhd [p_2] \\
+\#1 & = \{\val\} \\
+\#2 &= \{\#1 \op \#1\} \\
+\#3 &= \{ \#1 \op \#2\} \\
+\#4 &= \{ \#2 \op \#1\}
 \end{aligned}
 \end{equation*}
 
-Note $[x] = \{0, 0 \otimes 0\}$ gives us $[x] \lhd [x]$
+where $t_1 \in \#3$ and $t_2 \in \#4$. We now share the common terms and if the
+class were to contain multiple terms then terms that depend on that class can
+use all of them to apply even further axioms. 
 
+\subsection{The depend relation $\lhd$}
+To save having to go through every class and looking for terms to apply axioms to
+we have a notion of that the class has changed. So a class changes if it gets merged
+with another class or a term is added to it. That means we should only look in a
+class if it has changed or one of the classes that the class depend on has changed.
+This is a relation $x \lhd y$ which means that $y$ depend
+on $x$, which is defined to be:  
 
-* equivalence classes
-* abstrakt model of Expr
-på tal om det, har funderat på om det inte varit smartare (vi kommer inte ändra)
-att ha data TExpr t = Lit Literal | Var String | BinOp BinOp t t | TriOp TriOp t t t
-det hade kunnat göra Rules enklare. Slut parentes. Japp, var abstraka model kan ju se lite ut som det :p
-:)
-* <|
-  * can contain loops
-* monotone fitness function $\forall x,y. x < y ==> f (x + c) < f (y + c)$
-* why saturation is hard (it gets big fast)
+\begin{equation*}
+x \lhd y \Leftrightarrow \exists (t_1 \op t_2) \in y \text{ such that } t_1 \in x
+\vee t_2 \in x
+\end{equation*}
+
+Note that if we have the following class $[0] = \{0, 0 + 0\}$ gives us $[0] \lhd [0]$
+which means that a class may depend on it self. We can also have cycles in the depenency
+for example:
+\begin{equation*}
+\begin{aligned}
+\quad [2] = \{ 2 , [5] - [3] \} \\ % \quad needed to display [2]
+[3] = \{ 3 , [5] - [2] \} \\
+[5] = \{ 5 , [2] + [3] \}
+\end{aligned}
+\end{equation*}
+
+Here all the classes depend on each other which creates a cycle. We will generalise
+this further and have a family of relations indexed by the depth of the dependency.
+We will denote this relation by $x \lhd^n y$ which have the following inductive
+definition where n is the depth.
+\begin{equation*}
+\begin{aligned}
+x \lhd^1 y &\equiv x \lhd y \\
+x \lhd^n y &\equiv \exists (t_1 \op t_2) \in y \text { such that } 
+x \lhd^{n-1} t_1 \vee x \lhd^{n-1} t_2 \\
+& \text{ or } x \lhd^{n-1} y
+\end{aligned}
+\end{equation*}
+
+%* equivalence classes
+%* abstrakt model of Expr
+%på tal om det, har funderat på om det inte varit smartare (vi kommer inte ändra)
+%att ha data TExpr t = Lit Literal | Var String | BinOp BinOp t t | TriOp TriOp t t t
+%det hade kunnat göra Rules enklare. Slut parentes. Japp, var abstraka model kan ju se lite ut som det :p
+%:)
+%* <|
+%  * can contain loops
+%* monotone fitness function $\forall x,y. x < y ==> f (x + c) < f (y + c)$
+%* why saturation is hard (it gets big fast)
 
 \end{document}

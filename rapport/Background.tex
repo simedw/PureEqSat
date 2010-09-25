@@ -6,10 +6,11 @@ optimisations, loop-induction variables\cite{loop-induction} and a plethora of o
 they are orthogonal in how they optimise, and can benefit from each others optimisations.
 
 This is standard wisdom, but the reverse is also true, applying an optimisation
-may destroy an oppurtunity to apply another one. If we take the example of having a 
-term: $ 2 * x $, a peephole optimiser could rewrite this to the better term 
+may destroy an oppurtunity to apply yet another one. If we take the example of having a 
+term, $ 2 * x $, a peephole optimiser could rewrite this to the better term 
 $ x << 1$. But suppose this term was used in the loop, that the induction variable
-depends on. Then it may not fire that optimisation and the end result is worse.
+depends on. Then it may not be able to do loop induction optimisation and we end up
+with a result that is worse than if we would not.
 
 To circumvent this we must carefully choose in which order we apply the optimisations
 but even with greatest care we can't win. Different programs benefit differntly

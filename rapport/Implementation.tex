@@ -33,9 +33,54 @@ class. So if $\#x \lhd \#y$ then $\#x$ will store $\#y$ which we use when we upd
 $\#x$ to signal that it could be beneficial to check the rules against $\#y$.
 
 \subsection{Pattern-Matching on terms to see find axioms to apply}
-* * looking throw every term for match in the class. (hint callback future work) 
-* dirty-bit work
-  * depth of change in <|
+To perform optimisations we need to express different equivalenices that we want the optimiser to perform e.g. $0 + x$ is infact equivalent to just $x$. We call these rewrite rules simply rules.
+
+\begin{verbatim}
+zero_rule = forall1 $ \x -> (lit 0 `add` x) ~> x
+\end{verbatim}
+
+We can see a rule as a pattern and a template. To see if a rule can be applied, we first have to perform a `pattern match' on a equivalence class in question. If we have a add-term in the pattern we must find a corresponding add-term in that equivalence class. Often we will find more than one matching term, we store all of these since some of them may fail later on. For each term we recursivly do the pattern match on its children. Whene we can't find any matching terms the matching is aborted and that branch of the recursive matching is trashed. If we find a variable we bind the variables name to the equivalence class, this will act as an constraint later on.
+
+\begin{verbatim}
+match :: Pattern -> EqClass -> Monad [(Variable,EqClass)]
+match (Add p1 p2) cls = do 
+    terms <- getTerms cls
+    forM terms $ \x -> case x of
+            Add c1 c2 -> match p1 c1 `combine` match p2 c2
+            _         -> return failure
+                                       
+match (Var x)     cls = constraint x cls
+...
+\end{verbatim}
+
+After peforming the match we will have a set of possible constrains, if the var x is bounded to both $\#1$ and $\#2$ we must check that $\#1 \sim \#2$ or otherwise the pattern did not hold, this allow us to write expressions such as
+
+\begin{verbatim}
+forall1 $ \x -> x `eq` x ~> true
+\end{verbatim}
+
+After filtering out unsolveable constraints we have the real matches. The next step is build the template on the right hand side of the equivalence using the constraints to fill the holes made by the variables. And finally take the union between the created class and the matching class on the left hand side. Volia.
+
+\paragraph{Improvments} This pattern matching isn't very cheap to do, so we don't want to peform it more than necessarily. If the match failed on $\#y$ then it won't match until we add a new term in $\#y$ or in $\#x$ where $\#x \lhd^* \#y$. How deep down we have to look is actually very easy to caluclate. Every time we see some structure we add $1$ since this is constraining, vars are not constraining and will have to value 0. 
+
+\begin{verbatim}
+getDepth :: Pattern -> Int
+getDepth r = case r of
+    Var _     -> 0
+    Add p1 p2 -> 1 + max (getDepth p1) (getDepth p2)
+    ....
+\end{verbatim}
+
+By knowing the depth of a rule we know the maximum n in $\#x \lhd^n \#y$ for the change in x to matter. But to make use of this we needed to store the min depth change for each equivalence class and update it accordently.
+
+Every eq class have a list of classes that depends on them, and if a class is changed it will reset its own min depth to zero and recursivly set every class that dependes on it to the depth of the distance to the first class. We have to be aware of the potensial loops, but since we are interested in the minium value this is easily taken care of.
+
+Now we can easily disregard any rule that demands a certain depth if we don't have a shallower change for any given class.
+
+
+%* * looking throw every term for match in the class. (hint callback future work) 
+%* dirty-bit work
+%  * depth of change in <|
 \subsection{Cost function}
 The final step in our optimisation is to pick out the best term, we do this by
 storing the best represetant from each class. To decide which term that we should
@@ -44,9 +89,9 @@ much it cost to evaluate that function. To simplify further we put the following
 restrictions on it.
 
 \begin{itemize}
-  \item Forall terms $t$, $f(\blacksquare) \le f(t)$
+  \item Forall terms $t$, $f(\val) \le f(t)$
   \item If $t$ and $t'$ are terms such that $f(t) \le f(t')$ then forall $c$,
-         $f(t \otimes c) \le f(t' \otimes c)$
+         $f(t \op c) \le f(t' \op c)$
 \end{itemize}
 
 The first point says that if we have a value we don't need to compute any compound
