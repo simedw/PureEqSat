@@ -17,6 +17,18 @@ data Lit
     | LBool Bool
   deriving (Eq,Ord,Show)
 
+data BinOp
+    = Add'
+    | Mul'
+    | And'
+    | Or'
+    | Eq'
+  deriving(Eq, Ord, Show)
+
+data TriOp
+    = If'
+  deriving(Eq, Ord, Show)
+
 data TExpr r 
     = Lit Lit
     | Var String
@@ -98,8 +110,8 @@ addExpr exp = case out exp of
         return c
 -}
 
-addTerm :: EqExpr -> Opt EqRepr
-{-addTerm t@(EqExpr (Add p1 p2)) = do
+{-
+addTerm t@(EqExpr (Add p1 p2)) = do
     r <- getClass t
     case r of
         Nothing -> do classes <- getClasses
@@ -116,15 +128,36 @@ addTerm :: EqExpr -> Opt EqRepr
                         (x:xs) -> foldM union x xs--return x
         Just x -> return x
 -}
+addTerm :: EqExpr -> Opt EqRepr
 addTerm t = do
     rs <- getClassOpt t
     case rs of
         []  -> makeClass t
         (c:cls)  -> foldM union c cls
 
+getTermDep :: EqExpr -> Opt [EqRepr]
+getTermDep term = case unEqExpr term of
+    Lit _ -> getClasses
+    Var _ -> getClasses
+    Add x y  -> comb x y
+    Mul x y  -> comb x y
+    And x y  -> comb x y
+    Or x y   -> comb x y
+    Eq x y   -> comb x y
+    If x y z -> do
+        l <- getDependOnMe x
+        c <- getDependOnMe y
+        r <- getDependOnMe z
+        nubClasses (l ++ c ++ r) 
+  where
+    comb x y = do
+        l <- getDependOnMe x
+        r <- getDependOnMe y
+        nubClasses (l ++ r)
+
 getClassOpt :: EqExpr -> Opt [EqRepr]
 getClassOpt term = do
-    cls <- getClasses
+    cls <- getTermDep term -- getClasses
     flip filterM cls $ \c -> do
         anyM (similar term) =<< getElems c
 
@@ -135,6 +168,14 @@ anyM p (x : xs) = do
     if b
         then return True
         else anyM p xs
+
+andM :: Monad m => (a -> m Bool) -> [a] -> m Bool
+andM p []       = return True
+andM p (x : xs) = do
+    b <- p x
+    if b
+        then andM p xs
+        else return False
 
 similar :: EqExpr -> EqExpr -> Opt Bool
 similar (EqExpr (Lit i)) (EqExpr (Lit i')) = return (i == i')

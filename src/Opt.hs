@@ -12,6 +12,7 @@ module Opt
     , addElem
     , getClass   -- :: Eq (EqElem m) => EqElem m -> m (Maybe (EqRepr m))
     , getClasses
+    , getDependOnMe
     , runOpt -- :: m a -> a
 --    , markDirty
 --   , isDirty
@@ -21,6 +22,9 @@ module Opt
     , dependOn
     , getDepth
     , updated
+    , nubClasses
+    , getPtr
+    , root
   --  , addRule
   --  , addRules
   --  , getTopRule
@@ -28,7 +32,7 @@ module Opt
     ) where
 
 import Data.Foldable (toList)
-import qualified DisjointSetA as D -- för att kunna ha samma namn fast lifted
+import qualified IOSetA as D -- för att kunna ha samma namn fast lifted
 import Control.Monad
 import "mtl" Control.Monad.State.Strict
 import qualified Data.Map as M
@@ -60,8 +64,8 @@ getClasses :: OptMonad eqElem [D.EqRepr eqElem]
 getClasses = lift D.getClasses
 updated x y = lift(D.updated x y)
 getDepth x = lift (D.getDepth x)
-
-
+nubClasses xs = lift (D.nubClasses xs)
+root x = lift (D.root x)
 dependOn x xs = lift (D.dependOn x xs)
 getDependOnMe x = lift (D.getDependOnMe x)
 
@@ -70,6 +74,10 @@ addElem x cls = do
     deps <- getDependOnMe cls
     fun (S.singleton cls) 1 deps    
     return cls
+
+getPtr rep = lift $ do
+    D.Root p _ _ <- D.rootIO rep
+    return p
 
 union x y 
   | x == y    = do

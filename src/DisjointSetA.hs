@@ -10,6 +10,7 @@ module DisjointSetA
     , getClasses -- :: m [EqRepr]
     , dependOn
     , getDependOnMe
+    , nubClasses
     , updated
     , getDepth
     , runEqClass -- :: m a -> a

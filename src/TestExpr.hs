@@ -25,7 +25,17 @@ printClass :: EqRepr -> Opt ()
 printClass rep = do
     (Root i _ dat) <- lift $ rootIO rep 
     let s = eqSet dat
-    liftIO $ putStrLn $ "[#" ++ show i ++ "(depth: " ++ show (depth dat) ++ "),(size: " ++ show (S.size s) ++ ")]"
+    mdeps <- forM (eqDependOnMe dat) $ \d -> do
+        Root i _ _ <- lift $ rootIO d
+        return i
+    ideps <- forM (S.toList $ eqIDependOn dat) $ \d -> do
+        Root i _ _ <- lift $ rootIO d
+        return i
+    liftIO $ putStrLn $ "[#" ++ show i ++ "(depth: " ++ show (depth dat) 
+                         ++ "),(size: " ++ show (S.size s) 
+                         ++ "),(mdeps: " ++ show (nub mdeps)
+                         ++ "),(ideps: " ++ show (nub ideps)
+                         ++ ")]"
     forM_ (S.toList s) $ do \(EqExpr e) -> (showTerm e >>= \str -> liftIO $ putStrLn $ "  " ++ str)
     return ()
 
@@ -83,7 +93,7 @@ testFileExpr fileName = do
         Left err -> print err
         Right vs -> runOpt $ do
             eq <- translate vs
-            ruleEngine 1200000 rules
+            ruleEngine 10 rules
             cls <- Opt.getClasses
             mapM_ printClass $ reverse cls
             m <- liftIO $ newIORef M.empty

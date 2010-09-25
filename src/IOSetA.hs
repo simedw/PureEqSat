@@ -34,23 +34,25 @@ data MinEqRepr s
 
 data EqData s = EqData
     { eqSet  :: (Set s)
-    , eqDependOnMe :: Set (EqRepr s)
+    , eqDependOnMe :: [EqRepr s]
     , eqIDependOn  :: Set (EqRepr s)
     , depth :: Maybe Depth
     }
 
-unionFunction :: Ord s => EqData s -> EqData s -> EqData s
-unionFunction x y = EqData
-    { eqSet        = eqSet x `S.union` eqSet y
-    , eqDependOnMe = eqDependOnMe x `S.union` eqDependOnMe y
-    , eqIDependOn   = eqIDependOn x `S.union` eqIDependOn y
-    , depth  = Just 0 
-    }
+unionFunction :: Ord s => EqData s -> EqData s -> EqMonad s (EqData s)
+unionFunction x y = do
+    mdeps <- nubClasses (eqDependOnMe x ++ eqDependOnMe y)
+    return EqData
+            { eqSet        = eqSet x `S.union` eqSet y
+            , eqDependOnMe = mdeps
+            , eqIDependOn   = eqIDependOn x `S.union` eqIDependOn y
+            , depth  = Just 0 
+            }
 
 makeData :: s -> EqData s
 makeData s = EqData
     { eqSet = S.singleton s
-    , eqDependOnMe = S.empty
+    , eqDependOnMe = []
     , eqIDependOn  = S.empty
     , depth        = Just 0
     }
@@ -104,7 +106,8 @@ union iox ioy = do
         y <- root y
         (Root cx xrank xdata) <- rootIO x
         (Root cy yrank ydata) <- rootIO y
-        liftIO $ writeIOStableRef y $ Root (min cx cy) yrank (ydata `unionFunction` xdata) 
+        dat <- ydata `unionFunction` xdata
+        liftIO $ writeIOStableRef y $ Root (min cx cy) yrank dat
         liftIO $ writeIOStableRef x $ Node y
         return y
 
@@ -119,7 +122,8 @@ addElem :: Ord e => e -> EqRepr e -> EqMonad e ()
 addElem elem rep = do
     rep <- root rep
     Root c r dat <- rootIO rep
-    liftIO $ writeIOStableRef rep (Root c r dat { eqSet = S.insert elem (eqSet dat) })
+    liftIO $ writeIOStableRef rep (Root c r dat { eqSet = S.insert elem (eqSet dat) 
+                                                , depth = Just 0})
 
 
 getElems :: EqRepr e -> EqMonad e [e]
@@ -150,6 +154,19 @@ getClasses = do
             Root c _ _ | c `S.member` set -> fun classes set
                        | otherwise        -> liftM (cls :) $  fun classes (S.insert c set)
             _ -> fun classes set
+
+
+nubClasses :: [EqRepr e] -> EqMonad e [EqRepr e]
+nubClasses cls = fun cls S.empty
+  where
+    fun [] set = return []
+    fun (cls : classes) set = do
+        cls <- root cls
+        eq <- liftIO $ readIOStableRef cls
+        case eq of
+            Root c _ _ | c `S.member` set -> fun classes set
+                       | otherwise        -> liftM (cls :) $  fun classes (S.insert c set)
+
    
    {-
 getClasses = do
@@ -171,7 +188,13 @@ getClasses = do
 -- kanske blir skoj
 
 getDependOnMe :: EqRepr e -> EqMonad e [EqRepr e]
-getDependOnMe = liftM (\(Root _ _ dat) -> S.toList $ eqDependOnMe dat) . rootIO
+getDependOnMe rep = do
+    rep <- root rep
+    Root c r dat <- rootIO rep
+    mdeps <- nubClasses (eqDependOnMe dat)
+    liftIO $ writeIOStableRef rep $ Root c r dat { eqDependOnMe = mdeps }
+    return mdeps
+    --liftM (\(Root _ _ dat) -> eqDependOnMe dat) . rootIO
 
 dependOn :: EqRepr e -> [EqRepr e] -> EqMonad e ()
 p `dependOn` ps = do
@@ -181,7 +204,7 @@ p `dependOn` ps = do
     forM_ ps $ \ dep -> do
         dep <- root dep
         Root cd rd dat <- rootIO dep
-        liftIO $ writeIOStableRef dep $ Root cd rd dat { eqDependOnMe = S.insert p (eqDependOnMe dat) }
+        liftIO $ writeIOStableRef dep $ Root cd rd dat { eqDependOnMe = p : eqDependOnMe dat }
 
 
 updated :: EqRepr e -> Maybe Depth -> EqMonad e ()
