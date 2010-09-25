@@ -32,6 +32,8 @@ main = do
                                       (show_classes cmd)
         case res of
             Left err -> putStrLn $ "Error: " ++ err
-            Right (score, expr) -> do
-                print expr
-                when (cost cmd) $ putStrLn ("Cost: " ++ show score)
+            Right (old_score, new_score, old_expr, new_expr) -> do
+                putStrLn $ "From: " ++ show old_expr
+                when (cost cmd) $ putStrLn ("Cost: " ++ show old_score)
+                putStrLn $ "To : " ++ show new_expr
+                when (cost cmd) $ putStrLn ("Cost: " ++ show new_score)

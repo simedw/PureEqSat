@@ -96,19 +96,21 @@ testExpr expr = runOpt $ do
 testFileExpr :: FilePath -- ^ filename  
              -> Int      -- ^ maximum number of iterations of the rule engine
              -> Bool     -- ^ shoud we print all eq classes
-             -> IO (Either String (Int, Expr))
+             -> IO (Either String (Int, Int, Expr, Expr))
 testFileExpr fileName max_it show_cls = do
     file <- readFile fileName
     case parseExpr file of
         Left err -> return $ Left $ show err
         Right vs -> runOpt $ do
             eq <- translate vs
+            old_m <- liftIO $ newIORef M.empty
+            (old_score,old_expr) <- buildExpr old_m eq
             ruleEngine max_it rules
             cls <- Opt.getClasses
             when show_cls $ mapM_ printClass $ reverse cls
             m <- liftIO $ newIORef M.empty
-            res <- buildExpr m eq
-            return $ Right res -- liftIO $ print res  
+            (new_score,new_expr) <- buildExpr m eq
+            return $ Right (old_score,new_score,old_expr,new_expr)
     
 
 -- | Given an table for the value calculate the value (and term) of the

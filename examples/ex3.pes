@@ -1,0 +1,2 @@
+branch = x * (a + b)
+main = if v then branch else x*a + x*b
