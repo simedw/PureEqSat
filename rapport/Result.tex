@@ -15,10 +15,10 @@ fit for reasoning by axioms.
 \end{aligned}
 \end{equation*}
 
-This simple language has the obvious semantic with very natural eval function
-that simply maps each term to the corresponding value that we expect. The axioms
-follows from the mathematical reasoning basically this is how we use the rules
-in our implementation.
+This language has a very natural semantic in which the eval function simply maps
+each term to the corresponding mathematical value. 
+The rules we use follow from the mathematical axioms used for these objects, and
+bellow we will list some of them.
 
 \begin{verbatim}
 rules :: [Rule]
@@ -66,15 +66,84 @@ the subterms are known. So if we see an expression like $7 * 191$ we will say th
 it is equal to the term $1337$. Some of these evaluation rules have been expressed
 in the axioms that was given above.
 
+\paragraph{Examples}
+
+Let us look at some examples of how these rules interact which each-other. First
+we have a small example in which only the commutativity and the cancel law works
+toghether to simplify terms.
+
+\begin{verbatim}
+main = z + y == x + z
+\end{verbatim}
+
+This will be optimised to term \verb|main = y == x| which is what you expect, this
+is represented by six classes. Three for the different unknown variables, two
+for the different additions and the last one is for the equality. A further fact
+is that even if we don't have any rules for $ x == y ~ y == x$ our optimisations
+has found them to be equal and are represented in the class.
+
+Our next example will be:
+
+\begin{verbatim}
+main = if x == a then x * (a + b) else b * x + x * a
+\end{verbatim}
+
+Here we don't know what the equality is between x and a but we notice that the branches
+are equal so the final term is \verb"main = x * (a + b)" this is something which
+not even gcc can find on any optimisation level as will be seen below.
+
+\paragraph{Comparing with gcc/java}
+One interesting question to pose is how well our optimiser fairs against the old giants.
+To make a fair comparison we need to build an expresion that is equivalent to an expression in our language. This is easily done be creating a function taking arguments\footnote{We use ints since they are primitiv in both Java and c} and then see how that function is optimised. For gcc we just inspect the assembly code and for java we decompile the byte code.
+%\paragraph{}%Round 1}
+\begin{itemize}
+  \item \verb|if True then 1 else 2|
+\end{itemize}
+Both gcc\footnote{compiled with gcc -On, n=\{1,2,3\}} and java \footnote{openjdk6} optimises this to $1$.
+
+\begin{itemize}
+  \item \verb|if x + y == y + x then 1 else 2|
+\end{itemize}
+Here the java version fails to optimise and create two separate branches. While the c version still optimises the code to $1$.
+\begin{itemize}
+  \item \verb|if v then x * a + x * b else x * (a + b)|
+\end{itemize}
+This is the same as our second example above, but the branches has been exchanged with each other.
+Gcc failes to realize that the two branches are infact equal and compiles the following code: 
+\begin{verbatim}
+int fun(int x, int a, int b, int v)                                                         {                                                                                    
+   if(v)
+   {                                                                     
+      return x * a + x * b;                                                        
+   } else {                                                                         
+      return x * (a + b);                                                          
+   }
+}
+\end{verbatim}
+
+to roughly the following assembly. 
+\begin{verbatim}
+fun:                                                                                 
+  testl   %ecx, %ecx                                                               
+  jne .L5                                                                          
+  leal    (%rdx,%rsi), %eax                                                        
+  imull   %edi, %eax                                                               
+  ret                                                                              
+  .L5:                                                                                 
+    leal    (%rdx,%rsi), %eax                                                        
+    imull   %edi, %eax                                                               
+    ret                                                                              
+\end{verbatim}
+Note the jne instruction, this was
+compiled with gcc -O3 -s, and the asm still contains a compare.
+This while our optimiser solves each of the above cases.
 
 
 
-
-
-* cool examples:  x + y == y + x, show number of rules
-* Some timing of examples.. <- what sort of time should we take?
--- we can't compare the results against the pre-optimized, we only have our cost function.
-a sure, cost function result.
-* Simple ordo ananlysis? for parts of algorithm.
-* issues with scope? <-- resultat eller vart?
+%* cool examples:  x + y == y + x, show number of rules
+%* Some timing of examples.. <- what sort of time should we take?
+%-- we can't compare the results against the pre-optimized, we only have our cost function.
+%a sure, cost function result.
+%* Simple ordo ananlysis? for parts of algorithm.
+%* issues with scope? <-- resultat eller vart?
 \end{document}

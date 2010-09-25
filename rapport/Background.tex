@@ -1,26 +1,31 @@
 \begin{document}
 \section{Background}
-When writing an optimiser for a compiler usually we have a lot of different 
-optimisations at mind. For example in a compiler backend you may find peep-hole\cite{peephole}
+When writing an optimiser for a compiler there are usually a myriad of different optimisations to consider.
+%When writing an optimiser for a compiler usually we have a lot of different 
+%optimisations at mind.
+For example in a compiler backend you may find peep-hole\cite{peephole}
 optimisations, loop-induction variables\cite{loop-induction} and a plethora of others. In most cases 
 they are orthogonal in how they optimise, and can benefit from each others optimisations.
 
-This is standard wisdom, but the reverse is also true, applying an optimisation
+While this is common knowledge the reverse also holds true, applying an optimisation 
+%This is standard wisdom, but the reverse is also true, applying an optimisation
 may destroy an oppurtunity to apply yet another one. If we take the example of having a 
 term, $ 2 * x $, a peephole optimiser could rewrite this to the better term 
 $ x << 1$. But suppose this term was used in the loop, that the induction variable
 depends on. Then it may not be able to do loop induction optimisation and we end up
-with a result that is worse than if we would not.
-
+with a result that is suboptimal.%worse than if we would not.
+\paragraph{}
 To circumvent this we must carefully choose in which order we apply the optimisations
-but even with greatest care we can't win. Different programs benefit differntly
+but even with greatest care we can't win. Different programs benefit differently
 on different orders. This make us search for another approach to apply optimisations
-that don't depend on order. 
-
-The reason for why we failed with the peep-hole case is because when it has applied
-the old version of the code is gone. And because of this destructive update, each
-optimisation perform local checks if it would beneficial in the long run to apply
-or not. These are non-trivial to write, so wouldn't it better to not do destruvtive
+that doesn't depend on any order. 
+\paragraph{}
+We failed with the peep-hole case due to the old version of code being gone when 
+the optimisation had been applied.
+%The reason for why we failed with the peep-hole case is because when it has been applied,the old version of the code is gone.
+And because of this destructive update, each
+optimisation has to perform local checks to see if the optimisation would be beneficial in the long run %to apply or not.
+These checks are non-trivial to write, so wouldn't it better to not do destruvtive
 updates at all?
 
 We follow the approach of Equality Saturation\cite{eqSat}, but we do some things
@@ -29,7 +34,7 @@ differently from their paper. The approach is three-fold:
 \begin{enumerate}
   \item Translate the term to our equality-representation.
   \item Try to apply as many optimisations as possible, but only add new terms and
-        record the equivalence between term.
+        record the equivalence between terms.
   \item Go through the equivalence-graph and pick out the best term.
 \end{enumerate}
 
@@ -38,9 +43,5 @@ transparency which makes it easier for us to reason about the terms. All the opt
 we will discuss can be thought of as rewrite rules, and this is why we will hencefor
 call them axioms.
 
-%\section{Related work}
-%pure eq sat, ska vi kolla upp mer? tror det eftersom att dave verkar haj pa sant.
-%oki, vi kan prata lite om Santos och så mm.
-%jag sa att han har forskat pa liknande grejer...
 
 \end{document}
