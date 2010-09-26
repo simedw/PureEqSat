@@ -4,7 +4,7 @@
 module IOSetA where
 
 import Control.Monad
-import "mtl" Control.Monad.State
+import "mtl" Control.Monad.State.Strict
 
 import Data.IOStableRef
 import Data.Maybe (listToMaybe)

@@ -10,6 +10,7 @@ module Opt
     , getDependOnMe -- :: EqRepr e -> EqMonad e [EqRepr e]
     , getDepth      -- :: EqRepr s -> EqMonad s (Maybe Depth)
     , getElems      -- :: EqRepr e -> EqMonad e [e]
+    , getPtr        -- :: EqRepr e -> EqMonad e Int
     , makeClass     -- :: eqElem -> IOSet eqElem (EqRepr eqElem)
     , nubClasses    -- :: [EqRepr e] -> EqMonad e [EqRepr e]
     , root          -- :: EqRepr s -> IOSet s (EqRepr s)

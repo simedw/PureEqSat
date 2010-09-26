@@ -33,6 +33,7 @@ data Rule = Rule Pattern Pattern
 
 
 (~>) = Rule
+infix 0 ~>
 forall3 f = f (PAny 1) (PAny 2) (PAny 3)
 forall2 f = f (PAny 1) (PAny 2)
 forall1 f = f (PAny 1)
@@ -80,8 +81,12 @@ rules = map (\r -> (getRuleDepth r, r)) $
         , eval (rEq  `on` pInt)  eqI pBool
         , eval (rEq  `on` pBool) eqB pBool
 
-        , forall3 $ \x y z -> rMul x (rAdd y z) ~> rAdd (rMul x y) (rMul x z) -- distr ....
-        , forall3 $ \x y z -> rAdd (rMul x y) (rMul x z) ~> rMul x (rAdd y z)
+        , distr  rMul rAdd
+        , distr' rMul rAdd
+        , distr  rAnd rOr
+        , distr' rAnd rOr
+        , distr  rOr  rAnd
+        , distr' rOr  rAnd
         , forall1 $ \x -> x `rEq` x ~> rTrue
         , forall3 $ \x y z -> ((x `rAdd` z) `rEq` (y `rAdd` z)) ~> (x `rEq` y)
         , forall2 $ \x y -> rIf (rTrue) x y ~> x
@@ -89,6 +94,8 @@ rules = map (\r -> (getRuleDepth r, r)) $
         , forall2 $ \x y -> rIf y x x ~> x
         ] 
 
+distr op1 op2 = forall3 $ \x y z -> x `op1` (y `op2` z) ~> (x `op1` y) `op2` (x `op1` z)
+distr' op1 op2 = forall3 $ \x y z -> (x `op1` y) `op2` (x `op1` z) ~> x `op1` (y `op2` z) 
 zero op v     = forall1 $ \x -> (x `op` v) ~> v
 identity op v = forall1 $ \x -> (x `op` v) ~> x        
 commute op    = forall2 $ \x y -> (x `op` y) ~> (y `op` x)
@@ -96,22 +103,22 @@ assoc op      = forall3 $ \x y z -> ((x `op` y) `op` z) ~> (x `op` (y `op` z))
 eval op sop res = forall2 $ \x y -> (x `op` y) ~> res (x `sop` y)
 
 getRuleDepth :: Rule -> Int
-getRuleDepth (Rule r _) = getDepth r
+getRuleDepth (Rule r _) = getPDepth r
   where
-    getDepth :: Pattern -> Int
-    getDepth r = case r of
-        PExpr (Lit _) -> 0
-        PExpr (Var _) -> 0
-        PExpr (And p q) -> binDepth p q
-        PExpr (Or p q)  -> binDepth p q
-        PExpr (Mul p q) -> binDepth p q
-        PExpr (Add p q) -> binDepth p q
-        PExpr (Eq p q)  -> binDepth p q
-        PExpr (If p q z) -> 1 + maximum [getDepth p, getDepth q, getDepth z]
-        PAny _          -> 0
-        PLit _ _        -> 0
-     where
-        binDepth p q = 1 + max (getDepth p) (getDepth q)
+        getPDepth :: Pattern -> Int
+        getPDepth r = case r of
+            PExpr (Lit _) -> 0
+            PExpr (Var _) -> 0
+            PExpr (And p q) -> binDepth p q
+            PExpr (Or p q)  -> binDepth p q
+            PExpr (Mul p q) -> binDepth p q
+            PExpr (Add p q) -> binDepth p q
+            PExpr (Eq p q)  -> binDepth p q
+            PExpr (If p q z) -> 1 + maximum [getPDepth p, getPDepth q, getPDepth z]
+            PAny _          -> 0
+            PLit _ _        -> 0
+          where
+            binDepth p q = 1 + max (getPDepth p) (getPDepth q)
 
 
 eqRec :: [EqRepr] -> Opt Bool
@@ -120,7 +127,7 @@ eqRec (x:[])   = return True
 eqRec (x:y:xs) = liftM2 (&&) (equivalent x y) (eqRec (y:xs))
 
 -- Returns True if it has changed the class
-buildPattern :: Maybe EqRepr -> Pattern -> [Either (ID, Lit) (ID,EqRepr)] -> Opt (Bool, EqRepr)
+buildPattern :: Maybe EqRepr -> Pattern -> [(ID, Either Lit EqRepr)] -> Opt (Bool, EqRepr)
 buildPattern cls p ma = case p of
     PExpr (Lit i) -> addTermToClass (EqExpr $ Lit i) cls
     PExpr (Var x) -> addTermToClass (EqExpr $ Var x) cls
@@ -137,7 +144,7 @@ buildPattern cls p ma = case p of
         snd c `dependOn` [p1,p2,p3]
         return c
     PAny i     -> do
-        let c = fromJust $ lookup i $ rights ma
+        let Right c = fromJust $ lookup i $ ma
         maybe (return (False, c)) (myUnion (False, c)) cls
     PLit _ v -> do
         r <- literal v
@@ -160,8 +167,8 @@ buildPattern cls p ma = case p of
          return $ f q1 q2
        PLit _ v -> literal v
        PAny i -> do  
-         return $ fromJust $ lookup i $ lefts ma
- 
+         let Left c = fromJust $ lookup i ma
+         return c 
 
 combineConst2 :: [[a]] -> [[a]] -> Maybe [[a]]
 combineConst2 [] _  = Nothing
@@ -174,7 +181,7 @@ combineConst3 _  [] _   = Nothing
 combineConst3 _  _  []  = Nothing
 combineConst3 xs ys zs = Just [x ++ y ++ z | x <- xs, y <- ys, z <- zs]
 
-applyPattern :: Pattern -> EqRepr -> Opt [[Either (ID, Lit) (ID,EqRepr)]]
+applyPattern :: Pattern -> EqRepr -> Opt [[(ID, Either Lit EqRepr)]] -- [[Either (ID, Lit) (ID,EqRepr)]]
 applyPattern pattern cls = do 
     elems <- getElems cls
     case pattern of
@@ -206,12 +213,12 @@ applyPattern pattern cls = do
                 r3 <- applyPattern q3 p3
                 return $ combineConst3 r1 r2 r3
             _ -> return Nothing
-        PAny i -> return [[Right (i,cls)]]
+        PAny i -> return [[(i,Right cls)]]
         PLit (LInteger _) (PAny i) -> liftM catMaybes $ forM elems $ \rep -> case rep of
-            EqExpr (Lit l@(LInteger _)) -> return  $  Just [Left (i,l)]
+            EqExpr (Lit l@(LInteger _)) -> return  $  Just [(i, Left l)]
             _              -> return Nothing
         PLit (LBool _) (PAny i) -> liftM catMaybes $ forM elems $ \rep -> case rep of
-            EqExpr (Lit l@(LBool _)) -> return  $  Just [Left (i,l)]
+            EqExpr (Lit l@(LBool _)) -> return  $  Just [(i, Left l)]
             _              -> return Nothing
             
  where
@@ -227,27 +234,103 @@ applyPattern pattern cls = do
               r2 <- applyPattern q2 p2
               return $ combineConst2 r1 r2    
 
+applyPattern' :: Pattern -> EqRepr -> Set Int -> Opt [[(ID, Either Lit EqRepr)]] 
+applyPattern' pattern cls set = do 
+    elems <- getElems cls
+    case pattern of
+        PExpr (Lit i) -> liftM catMaybes $ forM elems $ \rep -> case rep of
+            EqExpr (Lit l) | i == l -> return  $ Just []
+            _              -> return Nothing
+        PExpr (Var x) -> liftM catMaybes $ forM elems $ \rep -> case rep of
+            EqExpr (Var y) | x == y -> return  $ Just []
+            _              -> return Nothing
+        PExpr (Add q1 q2) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
+            EqExpr (Add p1 p2) -> combine2 p1 p2 q1 q2 
+            _ -> return Nothing
+        PExpr (Mul q1 q2) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
+            EqExpr (Mul p1 p2) -> combine2 p1 p2 q1 q2
+            _ -> return Nothing
+        PExpr (And q1 q2) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
+            EqExpr (And p1 p2) -> combine2 p1 p2 q1 q2
+            _ -> return Nothing
+        PExpr (Or q1 q2) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
+            EqExpr (Or p1 p2) -> combine2 p1 p2 q1 q2
+            _ -> return Nothing
+        PExpr (Eq q1 q2) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
+            EqExpr (Eq p1 p2) -> combine2 p1 p2 q1 q2
+            _ -> return Nothing
+        PExpr (If q1 q2 q3) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
+            EqExpr (If p1 p2 p3) -> do
+                p1' <- getPtr p1
+                p2' <- getPtr p2
+                p3' <- getPtr p3
+                if S.fromList [p1',p2',p3'] `S.isSubsetOf` set
+                    then return Nothing
+                    else do
+                        r1 <- applyPattern' q1 p1 (S.insert p1' set) 
+                        r2 <- applyPattern' q2 p2 (S.insert p2' set)
+                        r3 <- applyPattern' q3 p3 (S.insert p3' set)
+                        return $ combineConst3 r1 r2 r3
+            _ -> return Nothing
+        PAny i -> return [[(i,Right cls)]]
+        PLit (LInteger _) (PAny i) -> liftM catMaybes $ forM elems $ \rep -> case rep of
+            EqExpr (Lit l@(LInteger _)) -> return  $  Just [(i, Left l)]
+            _              -> return Nothing
+        PLit (LBool _) (PAny i) -> liftM catMaybes $ forM elems $ \rep -> case rep of
+            EqExpr (Lit l@(LBool _)) -> return  $  Just [(i, Left l)]
+            _              -> return Nothing
+            
+ where
+    combine2 p1 p2 q1 q2 = do
+        p1' <- getPtr p1
+        p2' <- getPtr p2
+        let set' = S.fromList [p1',p2']
+        if set' `S.isSubsetOf` set
+            then return Nothing
+            else do
+              p1 <- root p1
+              p2 <- root p2
+              r1 <- applyPattern' q1 p1 (S.union set set')
+              r2 <- applyPattern' q2 p2 (S.union set set')
+              return $ combineConst2 r1 r2
+
 
 
 -- returns True when it matched
 apply :: Rule -> EqRepr -> Opt Bool
 apply (Rule p1 p2) cls = do
-    ma <- applyPattern p1 cls -- [[]] 
-
+    p <- getPtr cls
+    ma <- applyPattern' p1 cls (S.singleton p)
+    -- ma :: [ [ Either (Id, Lit) (id, eqrepr) ]] nagonting med nubclassesRight
+    ma <- fun ma S.empty
+    let t2 = length ma
     ma <- filterM (\l -> do 
         let same :: [ [EqRepr] ]
             same = map (map  snd) 
                      $ groupBy (\x y -> fst x == fst y) 
-                     $ sortBy (\x y -> compare (fst x) (fst y)) $ rights l
+                     $ sortBy (\x y -> compare (fst x) (fst y)) 
+                     $ [ (x, y) | (x, Right y) <- l ]
 
         liftM and $ mapM eqRec same
         ) ma
-
     list <- mapM (buildPattern (Just cls) p2) ma
 
     -- we should return True something has changed
     return $ any fst list
+  where
+    fun [] _ = return []
+    fun (x:xs) set = do
+        x' <- mapM translateConstraint (sortBy (compare `on` fst) x)
+        if S.member x' set
+            then fun xs set
+            else liftM (x:) (fun xs (S.insert x' set))
 
+translateConstraint :: (ID, Either Lit EqRepr) -> Opt (ID, Either Lit Int)
+translateConstraint (id, e) = liftM ((,) id) $ case e of
+    Left v -> return $ Left v
+    Right cls -> do
+        cls' <- getPtr cls
+        return $  Right  cls'
 -- Return True if any rule applied
 applyRules :: [(Int, Rule)] -> EqRepr -> Opt Bool
 applyRules rules reps = do
@@ -274,4 +357,3 @@ ruleEngine n rules | n < 0     = return ()
   classes <- getClasses
   res <- mapM (applyRules rules) classes
   when (any id res) $ ruleEngine (n-1) rules
-
