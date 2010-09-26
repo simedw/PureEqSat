@@ -70,13 +70,13 @@ in the axioms that was given above.
 
 Let us look at some examples of how these rules interact which each-other. First
 we have a small example in which only the commutativity and the cancel law works
-toghether to simplify terms.
+together to simplify terms.
 
 \begin{verbatim}
 main = z + y == x + z
 \end{verbatim}
 
-This will be optimised to term \verb|main = y == x| which is what you expect, this
+This will be optimized to term \verb|main = y == x| which is what you expect, this
 is represented by six classes. Three for the different unknown variables, two
 for the different additions and the last one is for the equality. 
 
@@ -88,26 +88,26 @@ main = if x == a then x * (a + b) else b * x + x * a
 
 Here we don't know what the equality is between x and a but we notice that the branches
 are equal so the final term is \verb"main = x * (a + b)" this is something which
-not even gcc can find on any optimisation level as will be seen below.
+not even gcc can find on any optimization level as will be seen below.
 
 \paragraph{Comparing with gcc/java}
-One interesting question to pose is how well our optimiser fairs against the old giants.
-To make a fair comparison we need to build an expresion that is equivalent to an expression in our language. This is easily done be creating a function taking arguments\footnote{We use ints since they are primitiv in both Java and c} and then see how that function is optimised. For gcc we just inspect the assembly code and for java we decompile the byte code.
+One interesting question to pose is how well our optimizer fairs against the old giants.
+To make a fair comparison we need to build an expression that is equivalent to an expression in our language. This is easily done be creating a function taking arguments\footnote{We use ints since they are primitive in both Java and c} and then see how that function is optimized. For gcc we just inspect the assembly code and for java we decompile the byte code.
 %\paragraph{}%Round 1}
 \begin{itemize}
   \item \verb|if True then 1 else 2|
 \end{itemize}
-Both gcc\footnote{compiled with gcc -On, n=\{1,2,3\}} and java \footnote{openjdk6} optimises this to $1$.
+Both gcc\footnote{compiled with gcc -On, n=\{1,2,3\}} and java \footnote{openjdk6} optimizes this to $1$.
 
 \begin{itemize}
   \item \verb|if x + y == y + x then 1 else 2|
 \end{itemize}
-Here the java version fails to optimise and create two separate branches. While the c version still optimises the code to $1$.
+Here the java version fails to optimize and create two separate branches. While the c version still optimizes the code to $1$.
 \begin{itemize}
   \item \verb|if v then x * a + x * b else x * (a + b)|
 \end{itemize}
 This is the same as our second example above, but the branches has been exchanged with each other.
-Gcc failes to realize that the two branches are infact equal and compiles the following code: 
+Gcc fails to realize that the two branches are in fact equal and compiles the following code: 
 \begin{verbatim}
 int fun(int x, int a, int b, int v)                                                         {                                                                                    
    if(v)
@@ -134,7 +134,7 @@ fun:
 \end{verbatim}
 Note the jne instruction, this was
 compiled with gcc -O3 -s, and the asm still contains a compare.
-This while our optimiser solves each of the above cases.
+This while our optimizer solves each of the above cases.
 
 \subsection{Problem with pattern matching}
 
@@ -142,7 +142,7 @@ Sadly we have noticed some problems with our pattern matcher, and the way in whi
 we apply the rules. Currently we take a class if it has changed we try to apply
 all rules (of depth that matches the depth of change). This unfortunately makes it
 so that in some cases some rules starts creating a lot of new classes, most of which 
-already exists but it is some later rule that will realise this eqaulity.
+already exists but it is some later rule that will realize this equality.
 
 This makes for an explosion of new classes with only one term (and a term in the
 original class) and all of these new classes are used by other rules to create even
@@ -150,7 +150,7 @@ more classes. And much of these classes we already have represented we just don'
 find that out before it is to late and we have to many terms.
 
 We\footnote{The authors of this paper} did not have time to really explore 
-this issue in detail, and have therfore have
+this issue in detail, and have therefore have
 no real solution to this problem. The reason for not finding this out earlier is
 that we previously had a bug in the pattern matcher that combined the different branches
 wrong and pruned away a lot of them. So we had a fast solution but we could miss

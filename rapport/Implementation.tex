@@ -7,7 +7,7 @@ the use of axioms. Finally we talk about how we choose the best representation i
 a given class.
 \subsection{How do we keep track of the classes?}
 To keep track of the the classes we must have an efficient data-structure to store
-them in. The different operations we may perform on classes is of the followin:
+them in. The different operations we may perform on classes is of the following:
 
 \begin{description}
   \item[makeClass] Given a term, we create a class where it belongs to.
@@ -20,7 +20,7 @@ them in. The different operations we may perform on classes is of the followin:
                     handles we check if they point to the same class.
 \end{description}
 
-Due to these requirements we have opted for a union-find structure and acompaning
+Due to these requirements we have opted for a union-find structure and accompanying
 algorithms. We have added some structure to it, for example we store all the terms
 in the root node. We represent this by the following data:
 % Kanske ar intressantare att man sparar dependcies istallet for att termarna ar
@@ -51,14 +51,14 @@ to be. %For example if we have the term $\#1 \op \#2$ we expect that if that ter
 For example if we want to know in which class the term $\#1 \op \#2$ exists in we only need to
 look in classes like $z$ where $\#1 \lhd z$ or $\#2 \lhd z$.
 \subsection{Pattern-Matching on terms}
-To perform optimisations we need to express different equivalenices that we want the optimiser to perform e.g. $0 + x$ is infact equivalent to just $x$. We call these rewrite rules simply rules.
+To perform optimizations we need to express different equivalencies that we want the optimizer to perform e.g. $0 + x$ is in fact equivalent to just $x$. We call these rewrite rules simply rules.
 Observe that we here will use examples from an arithmetical language.
 
 \begin{verbatim}
 zero_rule = forall1 $ \x -> (lit 0 `add` x) ~> x
 \end{verbatim}
 
-We can see a rule as a pattern and a template. To see if a rule can be applied, we first have to perform a `pattern match' on the equivalence class in question. If we have a add-term in the pattern we must find a corresponding add-term in that equivalence class. Often we will find more than one matching term, we store all of these since some of them may fail later on. For each term we recursivly do the pattern match on its children. When we can't find any matching terms the matching is aborted and that branch of the recursive matching is trashed. If we find a variable we bind the variables name to the equivalence class, this will act as an constraint later on.
+We can see a rule as a pattern and a template. To see if a rule can be applied, we first have to perform a `pattern match' on the equivalence class in question. If we have a add-term in the pattern we must find a corresponding add-term in that equivalence class. Often we will find more than one matching term, we store all of these since some of them may fail later on. For each term we recursively do the pattern match on its children. When we can't find any matching terms the matching is aborted and that branch of the recursive matching is trashed. If we find a variable we bind the variables name to the equivalence class, this will act as an constraint later on.
 
 \begin{verbatim}
 match :: Pattern -> EqClass -> Monad [(Variable,EqClass)]
@@ -72,16 +72,16 @@ match (Var x)     cls = constraint x cls
 ...
 \end{verbatim}
 
-After peforming the match we will have a set of possible constrains, if the variable x\footnote{x is an pattern variable for the rewrite rule and not an variable in the language.}
+After performing the match we will have a set of possible constrains, if the variable x\footnote{x is an pattern variable for the rewrite rule and not an variable in the language.}
  is bounded to both $\#1$ and $\#2$ we must check that $\#1 \sim \#2$ or otherwise the pattern did not hold, this allow us to write expressions such as
 
 \begin{verbatim}
 forall1 $ \x -> x `eq` x ~> true
 \end{verbatim}
 
-After filtering out unsolveable constraints we have the real matches. The next step is build the template on the right hand side of the equivalence using the constraints to fill the holes made by the variables. And finally take the union between the created class and the matching class on the left hand side. Voila!
+After filtering out unsolvable constraints we have the real matches. The next step is build the template on the right hand side of the equivalence using the constraints to fill the holes made by the variables. And finally take the union between the created class and the matching class on the left hand side. Voila!
 
-\paragraph{Improvements} This pattern matching isn't very cheap to do, so we don't want to peform it more than necessarily. If the match failed on $\#y$ then it won't match until we add a new term in $\#y$ or in $\#x$ where $\#x \lhd^* \#y$. How deep down we have to look is actually very easy to caluclate. Every time we see some structure we add $1$ since this is constraining, variables are not constraining and will have to value 0. 
+\paragraph{Improvements} This pattern matching isn't very cheap to do, so we don't want to perform it more than necessarily. If the match failed on $\#y$ then it won't match until we add a new term in $\#y$ or in $\#x$ where $\#x \lhd^* \#y$. How deep down we have to look is actually very easy to calculate. Every time we see some structure we add $1$ since this is constraining, variables are not constraining and will have to value 0. 
 
 \begin{verbatim}
 getDepth :: Pattern -> Int
@@ -91,9 +91,9 @@ getDepth r = case r of
     ....
 \end{verbatim}
 
-By knowing the depth of a rule we know the maximum n in $\#x \lhd^n \#y$ for the change in x to matter. But to make use of this we needed to store the min depth change for each equivalence class and update it accordently.
+By knowing the depth of a rule we know the maximum n in $\#x \lhd^n \#y$ for the change in x to matter. But to make use of this we needed to store the min depth change for each equivalence class and update it accordingly.
 
-Every equivalence class have a list of classes that depends on them, and if a class is changed it will reset its own min depth to zero and recursivly set every class that dependes on it to the depth of the distance to the first class. We have to be aware of the potential loops, but since we are interested in the minium value this is easily taken care of by recording which classes we have already updated.
+Every equivalence class have a list of classes that depends on them, and if a class is changed it will reset its own min depth to zero and recursively set every class that depends on it to the depth of the distance to the first class. We have to be aware of the potential loops, but since we are interested in the minimum value this is easily taken care of by recording which classes we have already updated.
 
 Now we can easily disregard any rule that demands a certain depth if we don't have a shallower change for any given class.
 
@@ -102,8 +102,8 @@ Now we can easily disregard any rule that demands a certain depth if we don't ha
 %* dirty-bit work
 %  * depth of change in <|
 \subsection{Cost function}
-The final step in our optimisation is to pick out the best term, we do this by
-storing the best represetant from each class. To decide which term that we should
+The final step in our optimization is to pick out the best term, we do this by
+storing the best representant from each class. To decide which term that we should
 consider best we have a cost function that given a term gives us a value how
 much it cost to evaluate that function. To simplify further we put the following
 restrictions on it.
@@ -129,7 +129,7 @@ When we calculate the result for the different classes, we also keep track of al
 the classes we currently are calculating for that aren't finished yet. If we encounter
 a term that depends on one of this classes we simply disregard it. This of course
 is not an optimal solution. What we really would want to do is put it on hold,
-and when the offending classes have gotten their priliminary values, we check if
+and when the offending classes have gotten their preliminary values, we check if
 any of the terms we put on hold would get a better result. In that case we would use that value and recalculate until we reach a fixed point.
 
 We haven't tested the final remark and we don't know if it really will work, but

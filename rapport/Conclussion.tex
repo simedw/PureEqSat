@@ -1,8 +1,8 @@
 \begin{document}
 \section{Conclusion}
-In the result we have seen that this model of doing optimisations can find interesting
-optimisations that are difficult to find using normal optimisations techniques.
-For example we showed that the following snippet would be optimised to true even
+In the result we have seen that this model of doing optimizations can find interesting
+optimizations that are difficult to find using normal optimizations techniques.
+For example we showed that the following snippet would be optimized to true even
 when we don't know what the values of either $x$ nor $y$ are.
 
 \begin{verbatim}
@@ -12,7 +12,7 @@ x + y == y + x
 This is akin to a proof search, we find terms that are equal by applying axioms
 and we get a proof\footnote{We can only call it a proof if the axioms really are 
 consistent with our equivalence relation.} that $x + y \sim y + x$. This proof
-is used by another proof that says that semantical equal terms will evaluate to 
+is used by another proof that says that semantically equal terms will evaluate to 
 True by the == operator in the language.
 
 We haven't yet tackled the issue with scope since it contains complications
@@ -25,7 +25,7 @@ There are a couple of languages that fall into this category, we have used a sim
 arithmetical language but more would be possible (and a simple to implement). For
 example simple propositional logic with simple laws to describe equal propositions,
 this could be useful in finding smaller representations for formulas. Similar
-relational algebra could be modeled and used to optimise static queries to databases.
+relational algebra could be modeled and used to optimize static queries to databases.
 
 %* Our language was a bit to simple to show really interesting things?
 %* compare our axioms to hard coded rules and why this approch is better/different.
