@@ -1,0 +1,4 @@
+cond = a || b 
+cond2 = a || b == False
+
+main = cond && cond2

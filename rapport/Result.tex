@@ -78,9 +78,7 @@ main = z + y == x + z
 
 This will be optimised to term \verb|main = y == x| which is what you expect, this
 is represented by six classes. Three for the different unknown variables, two
-for the different additions and the last one is for the equality. A further fact
-is that even if we don't have any rules for $ x == y ~ y == x$ our optimisations
-has found them to be equal and are represented in the class.
+for the different additions and the last one is for the equality. 
 
 Our next example will be:
 
@@ -138,7 +136,26 @@ Note the jne instruction, this was
 compiled with gcc -O3 -s, and the asm still contains a compare.
 This while our optimiser solves each of the above cases.
 
+\subsection{Problem with pattern matching}
 
+Sadly we have noticed some problems with our pattern matcher, and the way in which
+we apply the rules. Currently we take a class if it has changed we try to apply
+all rules (of depth that matches the depth of change). This unfortunately makes it
+so that in some cases some rules starts creating a lot of new classes, most of which 
+already exists but it is some later rule that will realise this eqaulity.
+
+This makes for an explosion of new classes with only one term (and a term in the
+original class) and all of these new classes are used by other rules to create even
+more classes. And much of these classes we already have represented we just don't
+find that out before it is to late and we have to many terms.
+
+We\footnote{The authors of this paper} did not have time to really explore 
+this issue in detail, and have therfore have
+no real solution to this problem. The reason for not finding this out earlier is
+that we previously had a bug in the pattern matcher that combined the different branches
+wrong and pruned away a lot of them. So we had a fast solution but we could miss
+to apply rules. We found out about this just a few days before the deadline, c'est
+la vie.
 
 %* cool examples:  x + y == y + x, show number of rules
 %* Some timing of examples.. <- what sort of time should we take?

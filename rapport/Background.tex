@@ -3,8 +3,8 @@
 When writing an optimiser for a compiler there are usually a myriad of different optimisations to consider.
 %When writing an optimiser for a compiler usually we have a lot of different 
 %optimisations at mind.
-For example in a compiler backend you may find peep-hole\cite{peephole}
-optimisations, loop-induction variables\cite{loop-induction} and a plethora of others. In most cases 
+For example in a compiler backend you may find peep-hole
+optimisations, loop-induction variables and a plethora of others. In most cases 
 they are orthogonal in how they optimise, and can benefit from each others optimisations.
 
 While this is common knowledge the reverse also holds true, applying an optimisation 
@@ -28,8 +28,8 @@ optimisation has to perform local checks to see if the optimisation would be ben
 These checks are non-trivial to write, so wouldn't it better to not do destruvtive
 updates at all?
 
-We follow the approach of Equality Saturation\cite{eqSat}, but we do some things
-differently from their paper. The approach is three-fold:
+We follow the approach of Equality Saturation\footnote{http://cseweb.ucsd.edu/~rtate/publications/eqsat/}
+, but we do some things differently from their paper. The approach is three-fold:
 
 \begin{enumerate}
   \item Translate the term to our equality-representation.

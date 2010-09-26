@@ -1,0 +1,6 @@
+-- nothing special, just big
+branche1 = (x+y) * (a + b + c + d)
+branche2 = x*a + x*b + x*c + x*d + branchey
+branchey = y*a + y*b + y*c + y*d 
+
+main = if branche1 == branche2 then 42 else 0
