@@ -6,10 +6,10 @@
 
 %?kanske forst forklara och gora en fin overgang varfor vi har informationen i den ordningen vi har?
 %jo kan kanske vara bra
-In this section we wil discuss the theory behind equality saturation and the acompaning concepts. We
+In this section we will discuss the theory behind equality saturation and the accompanying concepts. We
 start by defining an equivalence for our language that will be used by our axioms.
-This allows us to save space since instead of storing the subterms to a term, we
-store a reference to the equivalence class of those subterms. This allows us to represent a wide 
+This allows us to save space since instead of storing the sub terms to a term, we
+store a reference to the equivalence class of those sub terms. This allows us to represent a wide 
 variety of different combinations of terms efficiently.
 
 We will also define a relation
@@ -21,8 +21,8 @@ or rather where not to look for terms to apply axioms to.
 %In this paper we will use the standard equivalence class representation, that is:
 
 For our purpose we will say that two terms are equal if they evaluate to the same value, i.e the language
-is referential transparent. So if two terms $t_1$ and $t_2$ are equal it is safe to exchange an occurence
-of $t_1$ with $t_2$ and vice versa. This leads to this definition of the relation:
+is referential transparent. So if two terms $t_1$ and $t_2$ are equal it is safe to exchange an occurrence
+of $t_1$ with $t_2$ and vice verse. This leads to this definition of the relation:
 $t_1 \sim t_2 \equiv eval(t_1) = eval(t_2)$
 
 
@@ -34,8 +34,8 @@ $eval(t) = eval(t) \implies t \sim t$.
 Usually we will talk about classes instead of individual terms, these classes will
 be named \#1, \#2 and so forth. This corresponds to the usual definition by
 $y \in \#1 = [y] = \{ x : x \sim y\}$. From this we get the insight that we should
-not merly note that two terms are equal, but we should merge the two different classes.
-For example if $x + y \in \#1$ and $y + x \in \#2$ then the axiom of commutitativity
+not merely note that two terms are equal, but we should merge the two different classes.
+For example if $x + y \in \#1$ and $y + x \in \#2$ then the axiom of commutativity
 states that the classes \#1 and \#2 really are the same and should be merged.
 
 
@@ -74,14 +74,14 @@ without knowing more about the evaluation function.
 So we need to assume that they are different and creates two different equivalence
 classes \#1 and \#2 with ($t_1 \in \#1$, $t_2 \in \#2$).
 
-This is however not optimal since the subterm ($\val \op \val$) exists
+This is however not optimal since the sub term ($\val \op \val$) exists
 in both the term of the different classes. We don't want such waste of space and 
 further more if we were to learn some more information about that term it
 would only apply to one of the classes, even though both could potentially benefit from it. 
 
 %it is often hard to see if two seemly lagre programs are same from the top, we have to try and divide the programs in smaller parts without losing any information.
 
-Instead every subexpression in term is to be replaced with a class of terms that are all equivalent.
+Instead every sub expression in term is to be replaced with a class of terms that are all equivalent.
 So for the example above we get these classes:
 
 \begin{equation*}
@@ -114,7 +114,7 @@ x \lhd y \equiv \exists (t_1 \op t_2) \in y \text{ such that } t_1 \in x
 \end{equation*}
 
 Note that if we have the following class $[0] = \{0, 0 + 0\}$ gives us $[0] \lhd [0]$
-which means that a class may depend on it self. We can also have cycles in the depenency
+which means that a class may depend on it self. We can also have cycles in the dependency
 for example:
 \begin{equation*}
 \begin{aligned}
@@ -125,7 +125,7 @@ for example:
 \end{equation*}
 
 Here all the classes depend on each other which creates a cycle, which is something
-to be cautios of. We will generalise this relation
+to be cautious of. We will generalize this relation
 further and have a family of relations indexed by the depth of the dependency.
 We will denote this relation by $x \lhd^n y$ which have the following inductive
 definition where n is the depth.
@@ -139,7 +139,7 @@ x \lhd^{n-1} t_1 \vee x \lhd^{n-1} t_2 \\
 \end{equation*}
 
 \subsection{Equality Saturation}
-To bring it all together for a optimisation framework we will discuss how the optimisation
+To bring it all together for a optimization framework we will discuss how the optimization
 will work. The first thing we do is taking the language and create a similar language
 but where the previous language where recursive we instead replace these with a
 representation of our classes. So in the language theory we have above, $\op$ will
@@ -147,7 +147,7 @@ not contain terms but represents for the class of its children.
 
 When we have the term rewritten into this new language which is like an equality
 graph. We start to look through all rules and classes and try to find new terms,
-this will be done by our pattern matching alogrithm described in the next section.
+this will be done by our pattern matching algorithm described in the next section.
 
 We will continue to do this until it is saturated, i.e. there exist no more rules
 to apply, or if we run into a predefined limit of applications. We need to have a
@@ -157,7 +157,7 @@ exist rules that will always be applicative for example $\forall \,x. \; x \lead
 
 The final step is to go through all classes and pick the best term from this class
 to do this we will use a value function to decide which terms are better. Caution
-need to be taken since the classes can have a depenency that contain cycles. The
+need to be taken since the classes can have a dependency that contain cycles. The
 final term is then simply the best from its class.
 
 %* equivalence classes
