@@ -16,6 +16,9 @@ import Data.Function
 import qualified Data.Set as S
 import Data.Set (Set)
 
+import qualified Data.Map as M
+import Data.Map(Map)
+
 type ID = Int
 
 data Pattern = PExpr (TExpr Pattern)
@@ -157,6 +160,7 @@ buildPattern cls p ma = case p of
          let Left c = fromJust $ lookup i ma
          return c 
 
+{-
 combineConst2 :: [[a]] -> [[a]] -> Maybe [[a]]
 combineConst2 [] _  = Nothing
 combineConst2 _ []  = Nothing
@@ -251,7 +255,152 @@ applyRules rules reps = do
     apply' d (depth, rule)
               | d <= depth = apply rule reps
               | otherwise = return False
+-}
 
+type Done  = (Int, EqRepr, [Constraint])
+type Check = (Pattern, [(EqRepr, Pattern)], (Int, EqRepr), [Constraint])
+
+type Dones = [Done]
+type Checks = [Check]
+
+type ToCheck = [(EqRepr, Checks)]
+
+insertDone :: Done -> Dones -> Opt Dones
+insertDone done dones = return (done : dones)
+
+mergeDones :: Dones -> Dones -> Opt Dones
+mergeDones d1 d2 = return (d1 ++ d2)
+
+mergeChecks :: ToCheck -> ToCheck -> Opt ToCheck
+mergeChecks t1 t2 = return (t1 ++ t2)
+
+getToCheck :: ToCheck -> Opt (Maybe (EqRepr, Checks, ToCheck))
+getToCheck [] = return Nothing
+getToCheck ((e,c):tc) = return $ Just (e,c,tc)
+
+apply :: EqRepr -> ID -> [Constraint] -> Opt (Maybe [Constraint])
+apply cls id [] = return . Just $ [ (id, Right cls) ]
+apply cls id con@(id'@(cid,cls') : con') 
+    | id < cid = return . Just $ (id, Right cls) : con
+    | id == cid = do
+        b <- case cls' of
+            Left _ -> return False
+            Right cls' -> equivalent cls cls'
+        if b then return $ Just con else return Nothing
+    | otherwise = do
+        m <- apply cls id con'
+        return $ (id':) `fmap` m
+
+getDone :: EqRepr -> Checks -> Opt (Dones, ToCheck, Checks)
+getDone cls chks = foldM step ([], [], []) chks
+  where
+    step :: (Dones, ToCheck, Checks) -> Check -> Opt (Dones, ToCheck, Checks)
+    step (done, tc, chs) (PAny id, m, (rule, req), constraints) = do
+        mcon <- apply cls id constraints
+        case mcon of
+            Nothing -> return (done, tc, chs)
+            Just con -> case m of
+                [] -> do
+                    don <- insertDone (rule, req, con) done
+                    return (don, tc, chs)
+                (e,p):es -> return (done, (e,[(p, es, (rule,req), con)]) : tc, chs)
+    step (done, tc, chs) chk = return (done, tc, chk: chs)
+
+isEmpty :: Checks -> Bool
+isEmpty = null
+
+empty :: Opt Checks
+empty = return []
+
+emptyTC :: ToCheck
+emptyTC = []
+
+applyRules :: [(Int, Rule)] -> [EqRepr] -> Opt ()
+applyRules rules classes = do
+    let rules' = [ (nr, depth, pat) 
+                 | (nr, (depth, Rule pat _)) <- zip [0..] rules] 
+    tc <- forM classes $ \cls -> do
+        depth <- getDepth cls
+        case depth of
+            Nothing -> return (cls, [(p, [], (nr, cls), []) 
+                                    | (nr, _, p) <- rules'])
+            Just d  -> return (cls, [(p, [], (nr, cls), []) 
+                                    | (nr, d', p) <- rules'
+                                    , d <= d'])
+    liftIO $ print $ length tc
+    done <- loop tc []
+    liftIO $ print $ length done
+    mapM_ (\(rule, cls, con) -> buildPattern (Just cls) (getRule rule) con) done 
+  where
+    
+    ruleMap :: Map Int Pattern
+    ruleMap = M.fromList [ (id, rule) | (id, (_, Rule _ rule)) <- zip [0..] rules]
+
+    getRule :: Int -> Pattern
+    getRule i = ruleMap M.! i    
+
+    loop :: ToCheck -> Dones -> Opt Dones
+    loop tc done = do
+        ma <- getToCheck tc
+        case ma of
+            Nothing -> return done
+            Just (e,checks, eq) -> do
+                (done', eq') <- step e checks
+                d <- mergeDones done done'
+                e <- mergeChecks eq  eq'
+                loop e d
+
+    step :: EqRepr -> Checks -> Opt (Dones, ToCheck) 
+    step cls chks = do
+        (done, toc, undone) <- getDone cls chks
+        case isEmpty undone of
+            True -> return $ (,) done toc
+            False -> do
+                elems <- getElems cls
+                (ds, tc) <- liftM (unzip . concat) . forM elems $ \term -> do
+                    case unEqExpr term of
+                        Atom atom        -> checkAtom atom undone
+                        Bin bin e1 e2    -> checkBin bin e1 e2 undone
+                        Tri tri e1 e2 e3 -> checkTri tri e1 e2 e3 undone
+                (,) `fmap` foldM mergeDones done ds `ap` foldM mergeChecks toc tc
+
+    checkAtom :: Atom -> Checks -> Opt [(Dones, ToCheck)]
+    checkAtom atom chs = liftM concat . forM chs $ \check -> do
+        case check of
+            (PExpr (Atom atom'), m, rule@(rid, req), const) | atom == atom' -> do
+                case m of
+                    [] -> return [([(rid, req, const)] , [])]
+                    ((e,p):ps) -> return [([], [(e, [(p, ps, rule, const)])])]
+            _ -> return []
+
+    checkBin :: BinOp -> EqRepr -> EqRepr -> Checks -> Opt [(Dones, ToCheck)]
+    checkBin bin e1 e2 chs = liftM concat . forM chs $ \check -> do
+        e1 <- root e1
+        e2 <- root e2
+        case check of
+            (PExpr (Bin bin' p1 p2), m, rule, const) | bin == bin' -> do
+                return [ ([], [ (e1, [ (p1, (e2,p2):m, rule, const) ]) ]) ]
+            _ -> return []
+
+    checkTri :: TriOp -> EqRepr -> EqRepr -> EqRepr -> Checks -> Opt [(Dones, ToCheck)]
+    checkTri tri e1 e2 e3 chs = liftM concat . forM chs $ \check -> do
+        e1 <- root e1
+        e2 <- root e2
+        e3 <- root e3
+        case check of
+            (PExpr (Tri tri' p1 p2 p3), m, rule, const) | tri == tri' -> do
+                return [ ([], [ (e1, [ (p1, (e2,p2):(e3,p3):m, rule, const) ]) ]) ]
+            _ -> return []
+            
+
+ruleEngine :: Int -> [(Int, Rule)] -> Opt ()
+ruleEngine 0 rules = return ()
+ruleEngine n rules = do
+    classes <- getClasses
+    applyRules rules classes
+    ruleEngine (n-1) rules
+
+{-
 -- applys a set of rules on all classes
 ruleEngine :: Int -> [(Int,Rule)] -> Opt ()
 ruleEngine n rules | n < 0     = return ()
@@ -259,3 +408,4 @@ ruleEngine n rules | n < 0     = return ()
   classes <- getClasses
   res <- mapM (applyRules rules) classes
   when (any id res) $ ruleEngine (n-1) rules
+-}
