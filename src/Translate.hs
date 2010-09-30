@@ -33,14 +33,10 @@ addExprs ((v,e):es) gamma = do
 
 fv :: Expr -> Set Var
 fv expr = case out expr of
-    Lit _ -> S.empty
-    Var x -> S.singleton x
-    Add x y -> x `fuv` y
-    Mul x y -> x `fuv` y
-    And x y -> x `fuv` y
-    Or  x y -> x `fuv` y
-    Eq  x y -> x `fuv` y
-    If x y z -> x `fuv` y `S.union` fv z
+    Atom (Var x) -> S.singleton x
+    Atom _       -> S.empty
+    Bin _ x y    -> x `fuv` y
+    Tri _ x y z  -> x `fuv` y `S.union` fv z
   where
     x `fuv` y = fv x `S.union` fv y
 
@@ -77,27 +73,20 @@ topoSort toSort unknown = topoSort' [ (S.size (depOn var) , var, e) | (var , e) 
 
 addExpr :: Expr -> Map Var EqRepr -> Opt EqRepr
 addExpr exp gamma = case out exp of
-    Lit i    -> addTerm (EqExpr $ Lit i)
-    Var x    -> case M.lookup x gamma of
-        Nothing -> addTerm (EqExpr $ Var x)
+    Atom (Var x)    -> case M.lookup x gamma of
+        Nothing -> addTerm (EqExpr . Atom $ Var x)
         Just q  -> return q
-    Add x y  -> addBinTerm Add x y
-    Mul x y  -> addBinTerm Mul x y
-    And x y  -> addBinTerm And x y
-    Or  x y  -> addBinTerm Or  x y
-    Eq  x y  -> addBinTerm Eq  x y
-    If x y z -> addTriTerm If x y z
-  where
-    addBinTerm op x y = do
+    Atom a    -> addTerm (EqExpr $ Atom a)
+    Bin bin x y  -> do 
         x' <- addExpr x gamma
         y' <- addExpr y gamma
-        c <- addTerm (EqExpr $ op x' y')
+        c <- addTerm (EqExpr $ Bin bin x' y')
         c `dependOn` [x',y']
         return c
-    addTriTerm op x y z = do
+    Tri tri x y z -> do
         x' <- addExpr x gamma
         y' <- addExpr y gamma
         z' <- addExpr z gamma
-        c <- addTerm (EqExpr $ op x' y' z')
+        c <- addTerm (EqExpr $ Tri tri x' y' z')
         c `dependOn` [x',y', z']
         return c

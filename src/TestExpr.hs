@@ -49,23 +49,26 @@ rootID p = do
 
 showTerm :: TExpr (Opt.EqRepr (EqExpr)) -> Opt String
 showTerm exp = case exp of
-    Add p1 p2 -> showBin "+" p1 p2
-    Mul p1 p2 -> showBin "*" p1 p2
-    And p1 p2 -> showBin "`and`" p1 p2
-    Or  p1 p2 -> showBin "`or`" p1 p2
-    Eq  p1 p2 -> showBin "==" p1 p2
-    Lit i -> return $ show i
-    Var x -> return $ show x
-    If p1 p2 p3 -> do
+    Bin bin p1 p2 -> showBin (fromBin bin) p1 p2
+    Atom (Var x) -> return x
+    Atom i -> return $ show i
+    Tri If p1 p2 p3 -> do
         q1 <- rootID p1
         q2 <- rootID p2 
         q3 <- rootID p3
         return $ "if #" ++ show q1 ++ " then  #" ++  show q2 ++ " else #" ++ show q3
   where
+    fromBin bin = case bin of
+        Add -> "+"
+        Mul -> "*"
+        And -> " and "
+        Or  -> " or "
+        Eq  -> " == "
+
     showBin op p1 p2 = do
-    q1 <- rootID p1
-    q2 <- rootID p2 
-    return $ "#" ++ show q1 ++ " " ++ op ++ " #" ++  show q2
+        q1 <- rootID p1
+        q2 <- rootID p2 
+        return $ "#" ++ show q1 ++ " " ++ op ++ " #" ++  show q2
 
 -- | A simple tester, given a syntactic term it will be print status of how the
 --   classes looks etc.
@@ -138,30 +141,24 @@ buildExpr m rep = do
   where
     -- Values are always as good as or better than operators
     buildPre rep = case unEqExpr rep of
-        Var _    -> 1
-        Lit _    -> 1
-        _        -> 3
+        Atom _ -> 1
+        _      -> 3
 
     buildExpr' :: IORef (M.Map EqRepr (Maybe (Int,Expr))) -> EqExpr -> Opt (Int, Expr)
     buildExpr' m rep = case unEqExpr rep of
-        Add p1 p2 -> buildBin  Add 3 p1 p2
-        Mul p1 p2 -> buildBin  Mul 3 p1 p2
-        And p1 p2 -> buildBin  And 3 p1 p2
-        Or  p1 p2 -> buildBin  Or  3 p1 p2
-        Eq  p1 p2 -> buildBin  Eq  3 p1 p2
-        Var v -> return (1,In $ Var v)
-        Lit i -> return (1,In $ Lit i)
-        If  p1 p2 p3 -> do
+        Bin bin p1 p2 -> do
+            (c1,q1) <- buildExpr m p1
+            (c2,q2) <- buildExpr m p2
+            return (c1 + c2 + costBin bin , In $ Bin bin q1 q2)
+        Atom a -> return (1,In $ Atom a)
+        Tri tri  p1 p2 p3 -> do
             (c1,q1) <- buildExpr m p1
             (c2,q2) <- buildExpr m p2
             (c3,q3) <- buildExpr m p3
-            return (c1 + (max c2 c3) + 3,In $ If q1 q2 q3)
+            return (c1 + (max c2 c3) + costTri tri,In $ Tri tri q1 q2 q3)
      where
-        buildBin op cost p1 p2 = do
-            (c1,q1) <- buildExpr m p1
-            (c2,q2) <- buildExpr m p2
-            return (c1+c2+3,In $ q1 `op` q2)
-
+        costBin _ = 3
+        costTri _ = 3
 
 best :: Ord a => [(a,b)] -> [b]
 best xs = map snd $ best' (fst $ head sorted) sorted

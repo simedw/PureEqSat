@@ -20,15 +20,15 @@ type ID = Int
 
 data Pattern = PExpr (TExpr Pattern)
              | PAny ID
-             | PLit Lit Pattern
-             | PFun (Lit -> Lit -> Lit) Pattern Pattern
+             | PLit Atom Pattern
+             | PFun (Atom -> Atom -> Atom) Pattern Pattern
 
 instance Show Pattern where
   show p = case p of
     PExpr t -> "ex: " ++ show t
     PAny i  -> "any " ++ show i
 
-type Constraint = [(ID, EqRepr)] -> Opt Bool
+type Constraint = (ID, Either Atom EqRepr)
 data Rule = Rule Pattern Pattern
 
 
@@ -38,17 +38,17 @@ forall3 f = f (PAny 1) (PAny 2) (PAny 3)
 forall2 f = f (PAny 1) (PAny 2)
 forall1 f = f (PAny 1)
 
-rAnd x y  = PExpr (And x y)
-rOr x y   = PExpr (Or x y)
-rAdd x y  = PExpr (Add x y)
-rMul x y  = PExpr (Mul x y)
-rInt x    = PExpr (Lit $ LInteger x)
-rBool x   = PExpr (Lit $ LBool x)
+rAnd x y  = PExpr (Bin And x y)
+rOr x y   = PExpr (Bin Or x y)
+rAdd x y  = PExpr (Bin Add x y)
+rMul x y  = PExpr (Bin Mul x y)
+rInt x    = PExpr (Atom $ LInteger x)
+rBool x   = PExpr (Atom $ LBool x)
 rTrue     = rBool True
 rFalse    = rBool False
-rVar x    = PExpr (Var x)
-rEq x y   = PExpr (Eq x y)
-rIf x y z = PExpr (If x y z)
+rVar x    = PExpr (Atom $ Var x)
+rEq x y   = PExpr (Bin Eq x y)
+rIf x y z = PExpr (Tri If x y z)
 pInt x    = PLit (LInteger (error "don't peek here")) x
 pBool x   = PLit (LBool (error "don't peek here")) x
 
@@ -107,18 +107,11 @@ getRuleDepth (Rule r _) = getPDepth r
   where
         getPDepth :: Pattern -> Int
         getPDepth r = case r of
-            PExpr (Lit _) -> 0
-            PExpr (Var _) -> 0
-            PExpr (And p q) -> binDepth p q
-            PExpr (Or p q)  -> binDepth p q
-            PExpr (Mul p q) -> binDepth p q
-            PExpr (Add p q) -> binDepth p q
-            PExpr (Eq p q)  -> binDepth p q
-            PExpr (If p q z) -> 1 + maximum [getPDepth p, getPDepth q, getPDepth z]
+            PExpr (Atom _) -> 0
+            PExpr (Bin _ p q)   -> 1 + max (getPDepth p) (getPDepth q)
+            PExpr (Tri _ p q z) -> 1 + maximum (map getPDepth [p, q, z])
             PAny _          -> 0
             PLit _ _        -> 0
-          where
-            binDepth p q = 1 + max (getPDepth p) (getPDepth q)
 
 
 eqRec :: [EqRepr] -> Opt Bool
@@ -127,20 +120,20 @@ eqRec (x:[])   = return True
 eqRec (x:y:xs) = liftM2 (&&) (equivalent x y) (eqRec (y:xs))
 
 -- Returns True if it has changed the class
-buildPattern :: Maybe EqRepr -> Pattern -> [(ID, Either Lit EqRepr)] -> Opt (Bool, EqRepr)
+buildPattern :: Maybe EqRepr -> Pattern -> [Constraint] -> Opt (Bool, EqRepr)
 buildPattern cls p ma = case p of
-    PExpr (Lit i) -> addTermToClass (EqExpr $ Lit i) cls
-    PExpr (Var x) -> addTermToClass (EqExpr $ Var x) cls
-    PExpr (Add q1 q2) -> addBinTermToClass Add q1 q2
-    PExpr (Mul q1 q2) -> addBinTermToClass Mul q1 q2
-    PExpr (And q1 q2) -> addBinTermToClass And q1 q2
-    PExpr (Or q1 q2)  -> addBinTermToClass Or q1 q2
-    PExpr (Eq q1 q2)  -> addBinTermToClass Eq q1 q2
-    PExpr (If q1 q2 q3) -> do
+    PExpr (Atom i) -> addTermToClass (EqExpr $ Atom i) cls
+    PExpr (Bin bin q1 q2) -> do -- addBinTermToClass Add q1 q2
+        p1 <- rec q1
+        p2 <- rec q2
+        c <- addTermToClass  (EqExpr $ Bin bin p1 p2) cls
+        snd c `dependOn` [p1,p2]
+        return c
+    PExpr (Tri tri q1 q2 q3) -> do
         p1 <- rec q1
         p2 <- rec q2
         p3 <- rec q3
-        c <- addTermToClass (EqExpr $ If p1 p2 p3) cls
+        c <- addTermToClass (EqExpr $ Tri tri p1 p2 p3) cls
         snd c `dependOn` [p1,p2,p3]
         return c
     PAny i     -> do
@@ -148,18 +141,12 @@ buildPattern cls p ma = case p of
         maybe (return (False, c)) (myUnion (False, c)) cls
     PLit _ v -> do
         r <- literal v
-        c <- addTermToClass (EqExpr $ Lit r) cls
+        c <- addTermToClass (EqExpr $ Atom r) cls
         return c
         
   where
     rec q = snd `fmap` buildPattern Nothing q ma
-    addBinTermToClass op q1 q2 = do
-        p1 <- rec q1
-        p2 <- rec q2
-        c <- addTermToClass  (EqExpr $ p1 `op` p2) cls
-        snd c `dependOn` [p1,p2]
-        return c
-    literal :: Pattern -> Opt Lit
+    literal :: Pattern -> Opt Atom
     literal p = case p of
        PFun f p1 p2 -> do
          q1 <- literal p1
@@ -181,33 +168,26 @@ combineConst3 _  [] _   = Nothing
 combineConst3 _  _  []  = Nothing
 combineConst3 xs ys zs = Just [x ++ y ++ z | x <- xs, y <- ys, z <- zs]
 
-applyPattern :: Pattern -> EqRepr -> Opt [[(ID, Either Lit EqRepr)]] -- [[Either (ID, Lit) (ID,EqRepr)]]
+applyPattern :: Pattern -> EqRepr -> Opt [[Constraint]] -- [[Either (ID, Lit) (ID,EqRepr)]]
 applyPattern pattern cls = do 
     elems <- getElems cls
     case pattern of
-        PExpr (Lit i) -> liftM catMaybes $ forM elems $ \rep -> case rep of
-            EqExpr (Lit l) | i == l -> return  $ Just []
+        PExpr (Atom i) -> liftM catMaybes $ forM elems $ \rep -> case rep of
+            EqExpr (Atom l) | i == l -> return  $ Just []
             _              -> return Nothing
-        PExpr (Var x) -> liftM catMaybes $ forM elems $ \rep -> case rep of
-            EqExpr (Var y) | x == y -> return  $ Just []
-            _              -> return Nothing
-        PExpr (Add q1 q2) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
-            EqExpr (Add p1 p2) -> combine2 p1 p2 q1 q2 
+        PExpr (Bin bin q1 q2) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
+            EqExpr (Bin bin' p1 p2) | bin == bin' -> do
+                b <- equivalent p1 cls
+                b' <- equivalent p2 cls
+                if b || b'
+                     then return Nothing
+                     else do
+                       r1 <- applyPattern q1 p1 
+                       r2 <- applyPattern q2 p2
+                       return $ combineConst2 r1 r2    
             _ -> return Nothing
-        PExpr (Mul q1 q2) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
-            EqExpr (Mul p1 p2) -> combine2 p1 p2 q1 q2
-            _ -> return Nothing
-        PExpr (And q1 q2) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
-            EqExpr (And p1 p2) -> combine2 p1 p2 q1 q2
-            _ -> return Nothing
-        PExpr (Or q1 q2) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
-            EqExpr (Or p1 p2) -> combine2 p1 p2 q1 q2
-            _ -> return Nothing
-        PExpr (Eq q1 q2) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
-            EqExpr (Eq p1 p2) -> combine2 p1 p2 q1 q2
-            _ -> return Nothing
-        PExpr (If q1 q2 q3) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
-            EqExpr (If p1 p2 p3) -> do
+        PExpr (Tri tri q1 q2 q3) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
+            EqExpr (Tri tri' p1 p2 p3) | tri == tri' -> do
                 r1 <- applyPattern q1 p1 
                 r2 <- applyPattern q2 p2
                 r3 <- applyPattern q3 p3
@@ -215,95 +195,17 @@ applyPattern pattern cls = do
             _ -> return Nothing
         PAny i -> return [[(i,Right cls)]]
         PLit (LInteger _) (PAny i) -> liftM catMaybes $ forM elems $ \rep -> case rep of
-            EqExpr (Lit l@(LInteger _)) -> return  $  Just [(i, Left l)]
+            EqExpr (Atom l@(LInteger _)) -> return  $  Just [(i, Left l)]
             _              -> return Nothing
         PLit (LBool _) (PAny i) -> liftM catMaybes $ forM elems $ \rep -> case rep of
-            EqExpr (Lit l@(LBool _)) -> return  $  Just [(i, Left l)]
+            EqExpr (Atom l@(LBool _)) -> return  $  Just [(i, Left l)]
             _              -> return Nothing
-            
- where
-    combine2 p1 p2 q1 q2 = do
-       b <- equivalent p1 cls
-       b' <- equivalent p2 cls
-       if b || b'
-            then return Nothing
-            else do
-              p1 <- root p1
-              p2 <- root p2
-              r1 <- applyPattern q1 p1 
-              r2 <- applyPattern q2 p2
-              return $ combineConst2 r1 r2    
-
-applyPattern' :: Pattern -> EqRepr -> Set Int -> Opt [[(ID, Either Lit EqRepr)]] 
-applyPattern' pattern cls set = do 
-    elems <- getElems cls
-    case pattern of
-        PExpr (Lit i) -> liftM catMaybes $ forM elems $ \rep -> case rep of
-            EqExpr (Lit l) | i == l -> return  $ Just []
-            _              -> return Nothing
-        PExpr (Var x) -> liftM catMaybes $ forM elems $ \rep -> case rep of
-            EqExpr (Var y) | x == y -> return  $ Just []
-            _              -> return Nothing
-        PExpr (Add q1 q2) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
-            EqExpr (Add p1 p2) -> combine2 p1 p2 q1 q2 
-            _ -> return Nothing
-        PExpr (Mul q1 q2) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
-            EqExpr (Mul p1 p2) -> combine2 p1 p2 q1 q2
-            _ -> return Nothing
-        PExpr (And q1 q2) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
-            EqExpr (And p1 p2) -> combine2 p1 p2 q1 q2
-            _ -> return Nothing
-        PExpr (Or q1 q2) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
-            EqExpr (Or p1 p2) -> combine2 p1 p2 q1 q2
-            _ -> return Nothing
-        PExpr (Eq q1 q2) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
-            EqExpr (Eq p1 p2) -> combine2 p1 p2 q1 q2
-            _ -> return Nothing
-        PExpr (If q1 q2 q3) -> liftM (concat . catMaybes) $ forM elems $ \rep -> case rep of
-            EqExpr (If p1 p2 p3) -> do
-                p1' <- getPtr p1
-                p2' <- getPtr p2
-                p3' <- getPtr p3
-                if S.fromList [p1',p2',p3'] `S.isSubsetOf` set
-                    then return Nothing
-                    else do
-                        r1 <- applyPattern' q1 p1 (S.insert p1' set) 
-                        r2 <- applyPattern' q2 p2 (S.insert p2' set)
-                        r3 <- applyPattern' q3 p3 (S.insert p3' set)
-                        return $ combineConst3 r1 r2 r3
-            _ -> return Nothing
-        PAny i -> return [[(i,Right cls)]]
-        PLit (LInteger _) (PAny i) -> liftM catMaybes $ forM elems $ \rep -> case rep of
-            EqExpr (Lit l@(LInteger _)) -> return  $  Just [(i, Left l)]
-            _              -> return Nothing
-        PLit (LBool _) (PAny i) -> liftM catMaybes $ forM elems $ \rep -> case rep of
-            EqExpr (Lit l@(LBool _)) -> return  $  Just [(i, Left l)]
-            _              -> return Nothing
-            
- where
-    combine2 p1 p2 q1 q2 = do
-        p1' <- getPtr p1
-        p2' <- getPtr p2
-        let set' = S.fromList [p1',p2']
-        if set' `S.isSubsetOf` set
-            then return Nothing
-            else do
-              p1 <- root p1
-              p2 <- root p2
-              r1 <- applyPattern' q1 p1 (S.union set set')
-              r2 <- applyPattern' q2 p2 (S.union set set')
-              return $ combineConst2 r1 r2
-
-
 
 -- returns True when it matched
 apply :: Rule -> EqRepr -> Opt Bool
 apply (Rule p1 p2) cls = do
-    p <- getPtr cls
-    ma <- applyPattern' p1 cls (S.singleton p)
+    ma <- applyPattern p1 cls 
     -- ma :: [ [ Either (Id, Lit) (id, eqrepr) ]] nagonting med nubclassesRight
-    ma <- fun ma S.empty
-    let t2 = length ma
     ma <- filterM (\l -> do 
         let same :: [ [EqRepr] ]
             same = map (map  snd) 
@@ -325,7 +227,7 @@ apply (Rule p1 p2) cls = do
             then fun xs set
             else liftM (x:) (fun xs (S.insert x' set))
 
-translateConstraint :: (ID, Either Lit EqRepr) -> Opt (ID, Either Lit Int)
+translateConstraint :: Constraint -> Opt (ID, Either Atom Int)
 translateConstraint (id, e) = liftM ((,) id) $ case e of
     Left v -> return $ Left v
     Right cls -> do

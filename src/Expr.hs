@@ -11,48 +11,44 @@ import Data.List (groupBy,sort)
 import Control.Monad
 
 
-data Lit
+data Atom
     = LInteger Integer
     | LBool Bool
+    | Var String
   deriving (Eq,Ord,Show)
 
 data BinOp
-    = Add'
-    | Mul'
-    | And'
-    | Or'
-    | Eq'
+    = Add
+    | Mul
+    | And
+    | Or
+    | Eq
   deriving(Eq, Ord, Show)
 
 data TriOp
-    = If'
+    = If
   deriving(Eq, Ord, Show)
 
 data TExpr r 
-    = Lit Lit
-    | Var String
-    | Add r r
-    | Mul r r
-    | And r r
-    | Or  r r
-    | Eq r r
-    | If r r r
+    = Atom Atom
+    | Bin BinOp r r 
+    | Tri TriOp r r r
     deriving (Eq, Ord, Show)
 
 -- smart operators
-eAnd x y = In (And x y)
-eOr  x y = In (Or x y)
-eInt     = In . Lit . LInteger
-eBool    = In . Lit . LBool
+eAnd x y = In (Bin And x y)
+eOr  x y = In (Bin Or x y)
+eInt     = In . Atom . LInteger
+eBool    = In . Atom . LBool
 eTrue    = eBool True
 eFalse   = eBool False
 
-eVar     = In . Var
-x +. y  = In (Add x y)
-x *. y  = In (Mul x y)
-x ==. y = In (Eq x y)
+eVar     = In . Atom . Var
+x +. y  = In (Bin Add x y)
+x *. y  = In (Bin Mul x y)
+x ==. y = In (Bin Eq x y)
 
-eIf p tru fls = In (If p tru fls)
+eIf p tru fls = In (Tri If p tru fls)
 
 newtype Expr = In { out :: TExpr Expr } deriving (Eq, Ord)
 {-
@@ -66,21 +62,23 @@ ordning vi parsar, alla är left recursive (dock borde kanske inte == vara det)
 
 instance Show Expr where
     showsPrec p e = case out e of
-        Lit (LInteger i) -> shows i
-        Lit (LBool b)    -> shows b
-        Var x            -> showString x
+        Atom (LInteger i) -> shows i
+        Atom (LBool b)    -> shows b
+        Atom (Var x)      -> showString x
         -- osäker på siffrorna :)
-        Add e1 e2  -> showParen (p > 4) $
-            showsPrec 4 e1 . showString " + " . showsPrec 5 e2
-        Mul e1 e2  -> showParen (p > 5) $
-            showsPrec 5 e1 . showString " * " . showsPrec 6 e2
-        And e1 e2  -> showParen (p > 2) $
-            showsPrec 2 e1 . showString " && " . showsPrec 3 e2
-        Or e1 e2  -> showParen (p > 1) $
-            showsPrec 1 e1 . showString " || " . showsPrec 2 e2
-        Eq e1 e2  -> showParen (p > 3) $
-            showsPrec 4 e1 . showString " == " . showsPrec 4 e2
-        If e1 e2 e3  -> showParen (p > 0) $
+        Bin bin e1 e2 -> case bin of
+            Add -> showParen (p > 4) $
+                showsPrec 4 e1 . showString " + " . showsPrec 5 e2
+            Mul -> showParen (p > 5) $
+                showsPrec 5 e1 . showString " * " . showsPrec 6 e2
+            And -> showParen (p > 2) $
+                showsPrec 2 e1 . showString " && " . showsPrec 3 e2
+            Or  -> showParen (p > 1) $
+                showsPrec 1 e1 . showString " || " . showsPrec 2 e2
+            Eq  -> showParen (p > 3) $
+                showsPrec 4 e1 . showString " == " . showsPrec 4 e2
+  
+        Tri If e1 e2 e3  -> showParen (p > 0) $
             showString "if " . showsPrec 1 e1 
                              . showString " then " 
                              . showsPrec 1 e2
@@ -112,23 +110,16 @@ addTerm t = do
 
 getTermDep :: EqExpr -> Opt [EqRepr]
 getTermDep term = case unEqExpr term of
-    Lit _ -> getClasses
-    Var _ -> getClasses
-    Add x y  -> comb x y
-    Mul x y  -> comb x y
-    And x y  -> comb x y
-    Or x y   -> comb x y
-    Eq x y   -> comb x y
-    If x y z -> do
+    Atom _ -> getClasses
+    Bin _ x y  -> do
+        l <- getDependOnMe x
+        r <- getDependOnMe y
+        nubClasses (l ++ r)
+    Tri _ x y z -> do
         l <- getDependOnMe x
         c <- getDependOnMe y
         r <- getDependOnMe z
         nubClasses (l ++ c ++ r) 
-  where
-    comb x y = do
-        l <- getDependOnMe x
-        r <- getDependOnMe y
-        nubClasses (l ++ r)
 
 getClassOpt :: EqExpr -> Opt [EqRepr]
 getClassOpt term = do
@@ -153,20 +144,11 @@ andM p (x : xs) = do
         else return False
 
 similar :: EqExpr -> EqExpr -> Opt Bool
-similar (EqExpr (Lit i)) (EqExpr (Lit i')) = return (i == i')
-similar (EqExpr (Var v)) (EqExpr (Var v')) = return (v == v')
-similar (EqExpr (Add x y)) (EqExpr (Add x' y')) 
-    = liftM2 (&&) (equivalent x x') (equivalent y y')
-similar (EqExpr (Mul x y)) (EqExpr (Mul x' y')) 
-    = liftM2 (&&) (equivalent x x') (equivalent y y')
-similar (EqExpr (Or x y)) (EqExpr (Or x' y')) 
-    = liftM2 (&&) (equivalent x x') (equivalent y y')
-similar (EqExpr (And x y)) (EqExpr (And x' y')) 
-    = liftM2 (&&) (equivalent x x') (equivalent y y')
-similar (EqExpr (Eq x y)) (EqExpr (Eq x' y')) 
-    = liftM2 (&&) (equivalent x x') (equivalent y y')
-similar (EqExpr (If x y z)) (EqExpr (If x' y' z')) 
-    = and `fmap` zipWithM equivalent [x,y,z] [x',y',z']
+similar (EqExpr (Atom a)) (EqExpr (Atom a')) = return (a == a')
+similar (EqExpr (Bin bin x y)) (EqExpr (Bin bin' x' y'))  
+    | bin == bin' = liftM2 (&&) (equivalent x x') (equivalent y y')
+similar (EqExpr (Tri tri x y z)) (EqExpr (Tri tri' x' y' z')) 
+    | tri == tri' = and `fmap` zipWithM equivalent [x,y,z] [x',y',z']
 similar _ _ = return False
 
 myUnion :: (Bool, EqRepr) -> EqRepr -> Opt (Bool, EqRepr)
