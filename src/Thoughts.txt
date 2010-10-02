@@ -1,0 +1,22 @@
+Line of thought:
+Next up is new depth representation, I think that Maybe Int doesn't
+cut it anymore :/ I'm thinking of a (Int, [Int]) where the first
+component is the time (union, addElem) of the class and the second
+is how many times the depth has been bumped.
+
+Suppose
+that a class has time 40, that it direct subchild has been bumped 12 times
+and their has been bumped 80 etc.
+
+This is represented as (40, [12,80, ..])
+
+So everytime we in Opt.hs do a updateDepDepth we increase the number at that
+position by one.
+
+Then we have to store for each class and rule the last time we made this rule,
+this depends on the depth of the rule so if the rule has depth 2 for the previous
+example the time is 40 + 12 + 80 = 132. This makes sure that we don't miss anything
+and I think it is less ad-hoc than a solution that sometimes writes a Nothing.
+
+As an further optimisation, since we only ever need to look at maximum (map depth rules)
+we can shortcut updateDepDepth to that limit.

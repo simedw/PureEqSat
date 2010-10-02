@@ -31,9 +31,16 @@ instance Show Pattern where
     PExpr t -> "ex: " ++ show t
     PAny i  -> "any " ++ show i
 
-type Constraint = (ID, Either Atom EqRepr)
 data Rule = Rule Pattern Pattern
 
+-- Pair where only the first componoent is used for the Ord instance
+data P x y = P x y
+
+instance Ord x => Ord (P x y) where
+    compare (P x _) (P x' _) = compare x x'
+
+instance Eq x => Eq (P x y) where
+    P x _ == P x' _ = x == x'
 
 (~>) = Rule
 infix 0 ~>
@@ -60,8 +67,8 @@ mul  = PFun $ \(LInteger i) (LInteger j) ->  (LInteger $ i * j)
 eqI  = PFun $ \(LInteger i) (LInteger j) ->  (LBool $ i == j)
 eqB  = PFun $ \(LBool x)    (LBool y)    ->  (LBool $ x == y)
 
-rules :: [(Int,Rule)]
-rules = map (\r -> (getRuleDepth r, r)) $
+rules :: [(Int,Int,Rule)]
+rules = map (\r@(Rule r1 r2) -> (getRuleDepth r1, getRuleDepth r2, r)) $
         [ identity rAdd  (rInt 0)
         , identity rMul  (rInt 1)
         , identity rAnd  (rTrue)
@@ -105,14 +112,11 @@ commute op    = forall2 $ \x y -> (x `op` y) ~> (y `op` x)
 assoc op      = forall3 $ \x y z -> ((x `op` y) `op` z) ~> (x `op` (y `op` z))
 eval op sop res = forall2 $ \x y -> (x `op` y) ~> res (x `sop` y)
 
-getRuleDepth :: Rule -> Int
-getRuleDepth (Rule r _) = getPDepth r
-  where
-        getPDepth :: Pattern -> Int
-        getPDepth r = case r of
+getRuleDepth :: Pattern -> Int
+getRuleDepth p =  case p of
             PExpr (Atom _) -> 0
-            PExpr (Bin _ p q)   -> 1 + max (getPDepth p) (getPDepth q)
-            PExpr (Tri _ p q z) -> 1 + maximum (map getPDepth [p, q, z])
+            PExpr (Bin _ p q)   -> 1 + max (getRuleDepth p) (getRuleDepth q)
+            PExpr (Tri _ p q z) -> 1 + maximum (map getRuleDepth [p, q, z])
             PAny _          -> 0
             PLit _ _        -> 0
 
@@ -257,6 +261,7 @@ applyRules rules reps = do
               | otherwise = return False
 -}
 
+type Constraint = (ID, Either Atom EqRepr)
 type Done  = (Int, EqRepr, [Constraint])
 type Check = (Pattern, [(EqRepr, Pattern)], (Int, EqRepr), [Constraint])
 
@@ -264,6 +269,11 @@ type Dones = [Done]
 type Checks = [Check]
 
 type ToCheck = [(EqRepr, Checks)]
+
+type Constraint' = (ID, Either Atom Int)
+type Done' = (Int, Int, [Constraint'])
+
+type BitMask = P Done' Done
 
 insertDone :: Done -> Dones -> Opt Dones
 insertDone done dones = return (done : dones)
@@ -277,6 +287,20 @@ mergeChecks t1 t2 = return (t1 ++ t2)
 getToCheck :: ToCheck -> Opt (Maybe (EqRepr, Checks, ToCheck))
 getToCheck [] = return Nothing
 getToCheck ((e,c):tc) = return $ Just (e,c,tc)
+
+   
+translateCon :: Constraint -> Opt Constraint'
+translateCon (id, eit) = (,) id `fmap` case eit of
+    Left v -> return $ Left v
+    Right e -> do
+        e <- getPtr e
+        return (Right e)
+
+translateDone :: Done -> Opt (P Done' Done)
+translateDone org@(id, e, con) = do
+    e' <- getPtr e
+    con' <- mapM translateCon con
+    return $ P (id, e', con') org
 
 apply :: EqRepr -> ID -> [Constraint] -> Opt (Maybe [Constraint])
 apply cls id [] = return . Just $ [ (id, Right cls) ]
@@ -315,24 +339,28 @@ empty = return []
 emptyTC :: ToCheck
 emptyTC = []
 
-applyRules :: [(Int, Rule)] -> [EqRepr] -> Opt ()
-applyRules rules classes = do
+applyRules :: [(Int, Rule)] -> [EqRepr] -> Set BitMask -> Opt (Set BitMask)
+applyRules rules classes set = do
     let rules' = [ (nr, depth, pat) 
                  | (nr, (depth, Rule pat _)) <- zip [0..] rules] 
     tc <- forM classes $ \cls -> do
         depth <- getDepth cls
         case depth of
-            Nothing -> return (cls, [(p, [], (nr, cls), []) 
-                                    | (nr, _, p) <- rules'])
+            Nothing -> return (cls, [])
             Just d  -> return (cls, [(p, [], (nr, cls), []) 
                                     | (nr, d', p) <- rules'
                                     , d <= d'])
     liftIO $ print $ length tc
     done <- loop tc []
-    liftIO $ print $ length done
-    mapM_ (\(rule, cls, con) -> buildPattern (Just cls) (getRule rule) con) done 
+    done' <- flip filterM done $ \org@(i, e, con) -> do
+        e <- getPtr e
+        con <- mapM translateCon con
+        return . not $ P (i, e, con) org `S.member` set
+    liftIO $ print $ (length done, length done')
+    mapM_ (\(rule, cls, con) -> buildPattern (Just cls) (getRule rule) con) done'
+    (S.union set . S.fromList)`fmap`  (mapM translateDone done')
   where
-    
+ 
     ruleMap :: Map Int Pattern
     ruleMap = M.fromList [ (id, rule) | (id, (_, Rule _ rule)) <- zip [0..] rules]
 
@@ -393,12 +421,21 @@ applyRules rules classes = do
             _ -> return []
             
 
-ruleEngine :: Int -> [(Int, Rule)] -> Opt ()
-ruleEngine 0 rules = return ()
-ruleEngine n rules = do
-    classes <- getClasses
-    applyRules rules classes
-    ruleEngine (n-1) rules
+ruleEngine :: Int -> [(Int,Int, Rule)] -> Opt ()
+ruleEngine n rules = ruleEngine' n True S.empty
+  where
+    ruleEngine' :: Int -> Bool -> Set BitMask-> Opt ()
+    ruleEngine' 0 _ _   = return ()
+    ruleEngine' n b set = do
+        set <- reCheckMask set
+        classes <- getClasses
+        set <- applyRules [(inr, rule) | (inr, outr, rule) <-rules, b || outr <= 1] classes set
+        ruleEngine' (n-1) (not b) set
+
+    reCheckMask :: Set BitMask -> Opt (Set BitMask)
+    reCheckMask set = do
+        let set' = [ don | P _ don <- S.toList set]
+        S.fromList `fmap` mapM translateDone set' 
 
 {-
 -- applys a set of rules on all classes
