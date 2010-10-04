@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 module Main where
 import TestExpr
+import Dot
 import System.Console.CmdArgs
 import Control.Monad
 
@@ -9,6 +10,7 @@ data Sample = Sample
     , max_iterations :: Int
     , show_classes   :: Bool
     , cost :: Bool
+    , dotFile :: Maybe String
     }
   deriving (Show, Data, Typeable)
 
@@ -17,6 +19,7 @@ sample = Sample
     , max_iterations = 123 &= help "max number of rounds with the optimiser"
     , show_classes = False &= help "print classes"
     , cost = False &= help "show the cost"
+    , dotFile = Nothing &= help "where to save the dot file"
     }
   &= summary "PureEqSat v0.1, (C) Simon Edwardsson & Daniel Gustafsson 2010"
   &= program "PureEqSat"
@@ -32,8 +35,11 @@ main = do
                                       (show_classes cmd)
         case res of
             Left err -> putStrLn $ "Error: " ++ err
-            Right (old_score, new_score, old_expr, new_expr) -> do
+            Right (old_score, new_score, old_expr, new_expr, dot) -> do
                 putStrLn $ "From: " ++ show old_expr
                 when (cost cmd) $ putStrLn ("Cost: " ++ show old_score)
                 putStrLn $ "To : " ++ show new_expr
                 when (cost cmd) $ putStrLn ("Cost: " ++ show new_score)
+                case dotFile cmd of
+                   Nothing -> return ()
+                   Just file -> writeFile file dot

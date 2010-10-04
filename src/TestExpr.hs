@@ -4,6 +4,8 @@ module TestExpr where
 
 import Expr
 import Rule
+import Dot
+
 import IOSetA hiding (EqRepr)
 import Opt hiding (EqRepr)
 import qualified Opt
@@ -99,7 +101,7 @@ testExpr expr = runOpt $ do
 testFileExpr :: FilePath -- ^ filename  
              -> Int      -- ^ maximum number of iterations of the rule engine
              -> Bool     -- ^ shoud we print all eq classes
-             -> IO (Either String (Int, Int, Expr, Expr))
+             -> IO (Either String (Int, Int, Expr, Expr, String))
 testFileExpr fileName max_it show_cls = do
     file <- readFile fileName
     case parseExpr file of
@@ -113,7 +115,8 @@ testFileExpr fileName max_it show_cls = do
             when show_cls $ mapM_ printClass $ reverse cls
             m <- liftIO $ newIORef M.empty
             (new_score,new_expr) <- buildExpr m eq
-            return $ Right (old_score,new_score,old_expr,new_expr)
+            dot <- toGraphviz
+            return $ Right (old_score,new_score,old_expr,new_expr, dot)
     
 
 -- | Given an table for the value calculate the value (and term) of the
