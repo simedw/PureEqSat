@@ -24,7 +24,7 @@ type EqMonad = IOSet
 
 type EqRepr s = IOStableRef (MinEqRepr s)
 
-type Depth = Int
+type Depth = (Int, [Int])
 type Rank  = Int
 type CompareType = Int
 data MinEqRepr s 
@@ -35,7 +35,7 @@ data EqData s = EqData
     { eqSet  :: (Set s)              -- ^ terms
     , eqDependOnMe :: [EqRepr s]     -- ^ if we are x then list of y such as x <| y 
     , eqIDependOn  :: Set (EqRepr s) -- ^ if we are x then list of y such as y <| x
-    , depth :: Maybe Depth  -- ^ if we are x then min n such that y <|^n x, where y has changed
+    , depth :: Depth  -- ^ if we are x then min n such that y <|^n x, where y has changed
     }
 
 -- | Union for the EqData, will also set depth to zero
@@ -46,15 +46,24 @@ unionFunction x y = do
             { eqSet        = eqSet x `S.union` eqSet y
             , eqDependOnMe = mdeps
             , eqIDependOn   = eqIDependOn x `S.union` eqIDependOn y
-            , depth  = Just 0 
+            , depth  = depth x <+> depth y
             }
+  where
+    (<+>) :: Depth -> Depth -> Depth
+    (ab, al) <+> (bb, bl) = (ab + bb, plus al bl)
+
+    plus :: [Int] -> [Int] -> [Int]
+    plus [] ys = ys
+    plus xs [] = xs
+    plus (x:xs) (y:ys) = (x + y) : plus xs ys
+
 
 makeData :: s -> EqData s
 makeData s = EqData
     { eqSet = S.singleton s
     , eqDependOnMe = []
     , eqIDependOn  = S.empty
-    , depth        = Just 0
+    , depth        = (0, [])
     }
 
 -- | Returns a pointer to a root node for a given class
@@ -128,8 +137,9 @@ addElem :: Ord e => e -> EqRepr e -> EqMonad e ()
 addElem elem rep = do
     rep <- root rep
     Root c r dat <- rootIO rep
+    let (dBase, dChild) = depth dat
     liftIO $ writeIOStableRef rep (Root c r dat { eqSet = S.insert elem (eqSet dat) 
-                                                , depth = Just 0})
+                                                , depth = (dBase + 1, dChild) })
 
 -- | Get all terms from a given class.
 getElems :: EqRepr e -> EqMonad e [e]
@@ -199,21 +209,26 @@ p `dependOn` ps = do
         Root cd rd dat <- rootIO dep
         liftIO $ writeIOStableRef dep $ Root cd rd dat { eqDependOnMe = p : eqDependOnMe dat }
 
+
 -- | Set the depth, if the class doesn't have a depth currently set it unconditionally
 --   otherwise set it to the smallest value (unless you set it to Nothing in which
 --   case you mean that it has no more changes). 
-updated :: EqRepr e -> Maybe Depth -> EqMonad e ()
+updated :: EqRepr e -> Int -> EqMonad e ()
 updated cls deep = do
     cls <- root cls
     Root a b dat <- rootIO cls
     let dat' = case depth dat of
-         Nothing -> dat { depth = deep }
-         Just de -> dat { depth = liftM (min de) deep } -- :)
+         (dBase, dChild) -> dat { depth = (dBase, inc deep dChild) }
     liftIO $ writeIOStableRef cls $ Root a b dat'
+  where
+    inc :: Int -> [Int] -> [Int]
+    inc n [] = inc n [0]
+    inc 0 (x:xs) = (x+1) : xs
+    inc n (x:xs) = x : inc (n-1) xs
 
 -- | Given an class, tell how far you must go down depenencies for the class to
 --   have been changed, Nothing says no changes.
-getDepth :: EqRepr s -> EqMonad s (Maybe Depth)
+getDepth :: EqRepr s -> EqMonad s Depth
 getDepth reps = do
     Root _ _ dat <- rootIO reps
     return $ depth dat

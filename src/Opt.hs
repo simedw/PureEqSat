@@ -2,6 +2,7 @@
 module Opt 
     ( OptMonad    -- :: * -> * -> *
     , D.EqRepr    -- :: * -> *
+    , D.Depth     -- :: *
     , addElem       -- :: (Ord e) => e -> EqRepr e -> EqMonad e (EqRepr e)
     , dependOn      -- :: EqRepr e -> [EqRepr e] -> EqMonad e ()
     , equivalent    -- :: EqRepr e -> EqRepr e -> EqMonad e Bool
@@ -72,7 +73,7 @@ updateDepDepth set depth [] = return ()
 updateDepDepth set depth (cls:classes) 
     | cls `S.member` set = updateDepDepth set depth classes
     | otherwise = do 
-        updated cls (Just depth) 
+        updated cls depth 
         deps <- getDependOnMe cls
         updateDepDepth (S.insert cls set) (depth+1) deps
         updateDepDepth (S.insert cls set) depth classes

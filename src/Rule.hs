@@ -273,6 +273,7 @@ type ToCheck = [(EqRepr, Checks)]
 type Constraint' = (ID, Either Atom Int)
 type Done' = (Int, Int, [Constraint'])
 
+type History = Map Int Depth
 type BitMask = P Done' Done
 
 insertDone :: Done -> Dones -> Opt Dones
@@ -302,17 +303,19 @@ translateDone org@(id, e, con) = do
     con' <- mapM translateCon con
     return $ P (id, e', con') org
 
-apply :: EqRepr -> ID -> [Constraint] -> Opt (Maybe [Constraint])
-apply cls id [] = return . Just $ [ (id, Right cls) ]
-apply cls id con@(id'@(cid,cls') : con') 
-    | id < cid = return . Just $ (id, Right cls) : con
+apply :: Either Atom EqRepr -> ID -> [Constraint] -> Opt (Maybe [Constraint])
+apply val id [] = return . Just $ [ (id, val) ]
+apply val id con@(id'@(cid,cls') : con') 
+    | id < cid = return . Just $ (id, val) : con
     | id == cid = do
         b <- case cls' of
             Left _ -> return False
-            Right cls' -> equivalent cls cls'
+            Right cls' -> case val of
+                Left _ -> return False
+                Right cls -> equivalent cls cls'
         if b then return $ Just con else return Nothing
     | otherwise = do
-        m <- apply cls id con'
+        m <- apply val id con'
         return $ (id':) `fmap` m
 
 getDone :: EqRepr -> Checks -> Opt (Dones, ToCheck, Checks)
@@ -320,7 +323,7 @@ getDone cls chks = foldM step ([], [], []) chks
   where
     step :: (Dones, ToCheck, Checks) -> Check -> Opt (Dones, ToCheck, Checks)
     step (done, tc, chs) (PAny id, m, (rule, req), constraints) = do
-        mcon <- apply cls id constraints
+        mcon <- apply (Right cls) id constraints
         case mcon of
             Nothing -> return (done, tc, chs)
             Just con -> case m of
@@ -339,17 +342,34 @@ empty = return []
 emptyTC :: ToCheck
 emptyTC = []
 
-applyRules :: [(Int, Rule)] -> [EqRepr] -> Set BitMask -> Opt (Set BitMask)
-applyRules rules classes set = do
+getLevelChange :: Maybe Depth -> Depth -> Maybe Int
+getLevelChange Nothing _ = Just 0
+getLevelChange (Just (org, olist)) (new, nlist)
+    | org < new = Just 0
+    | otherwise = go 1 olist nlist
+  where
+    go :: Int -> [Int] -> [Int] -> Maybe Int
+    go pos [] [] = Nothing
+    go pos (o:os) (n:ns) | n <= o = go (pos +1) os ns
+    go pos _ _  = Just pos
+
+
+applyRules :: [(Int, Rule)] -> [EqRepr] -> History -> Set BitMask -> Opt (History, Set BitMask)
+applyRules rules classes history set = do
     let rules' = [ (nr, depth, pat) 
                  | (nr, (depth, Rule pat _)) <- zip [0..] rules] 
     tc <- forM classes $ \cls -> do
         depth <- getDepth cls
-        case depth of
+        c <- getPtr cls
+        case getLevelChange (M.lookup c history) depth  of
             Nothing -> return (cls, [])
             Just d  -> return (cls, [(p, [], (nr, cls), []) 
                                     | (nr, d', p) <- rules'
-                                    , d <= d'])
+                                    , d <= d' ])
+    history' <- liftM M.fromList . forM classes $ \cls -> do
+        depth <- getDepth cls
+        i <- getPtr cls
+        return (i, depth)
     liftIO $ print $ length tc
     done <- loop tc []
     done' <- flip filterM done $ \org@(i, e, con) -> do
@@ -358,7 +378,8 @@ applyRules rules classes set = do
         return . not $ P (i, e, con) org `S.member` set
     liftIO $ print $ (length done, length done')
     mapM_ (\(rule, cls, con) -> buildPattern (Just cls) (getRule rule) con) done'
-    (S.union set . S.fromList)`fmap`  (mapM translateDone done')
+    set' <- (S.union set . S.fromList) `fmap`  (mapM translateDone done')
+    return (history', set')
   where
  
     ruleMap :: Map Int Pattern
@@ -399,7 +420,35 @@ applyRules rules classes set = do
                 case m of
                     [] -> return [([(rid, req, const)] , [])]
                     ((e,p):ps) -> return [([], [(e, [(p, ps, rule, const)])])]
+            (PLit (LInteger _) (PAny i) , m, rule@(rid, req), const) | isInt atom -> do
+                mconst <- apply (Left atom) i const 
+                case mconst of
+                    Nothing -> return []
+                    Just con -> case m of
+                        [] -> return [([(rid, req, con)] , [])]
+                        ((e,p):ps) -> return [([], [(e, [(p, ps, rule, con)])])]
+            (PLit (LBool _) (PAny i) , m, rule@(rid, req), const) | isBool atom -> do
+                mconst <- apply (Left atom) i const 
+                case mconst of
+                    Nothing -> return []
+                    Just con -> case m of
+                        [] -> return [([(rid, req, con)] , [])]
+                        ((e,p):ps) -> return [([], [(e, [(p, ps, rule, con)])])]
             _ -> return []
+      where
+        isBool (LBool _) = True
+        isBool _ = False
+
+        isInt (LInteger _) = True
+        isInt _            = False        
+   {-
+             PLit (LInteger _) (PAny i) -> liftM catMaybes $ forM elems $ \rep -> case rep of
+                EqExpr (Atom l@(LInteger _)) -> return  $  Just [(i, Left l)]
+                _              -> return Nothing
+            PLit (LBool _) (PAny i) -> liftM catMaybes $ forM elems $ \rep -> case rep of
+                EqExpr (Atom l@(LBool _)) -> return  $  Just [(i, Left l)]
+                _              -> return Nothing
+    -}
 
     checkBin :: BinOp -> EqRepr -> EqRepr -> Checks -> Opt [(Dones, ToCheck)]
     checkBin bin e1 e2 chs = liftM concat . forM chs $ \check -> do
@@ -422,15 +471,18 @@ applyRules rules classes set = do
             
 
 ruleEngine :: Int -> [(Int,Int, Rule)] -> Opt ()
-ruleEngine n rules = ruleEngine' n True S.empty
+ruleEngine n rules = ruleEngine' n True M.empty S.empty
   where
-    ruleEngine' :: Int -> Bool -> Set BitMask-> Opt ()
-    ruleEngine' 0 _ _   = return ()
-    ruleEngine' n b set = do
+    ruleEngine' :: Int -> Bool -> History -> Set BitMask-> Opt ()
+    ruleEngine' 0 _ _ _  = return ()
+    ruleEngine' n b hist set = do
         set <- reCheckMask set
         classes <- getClasses
-        set <- applyRules [(inr, rule) | (inr, outr, rule) <-rules, b || outr <= 1] classes set
-        ruleEngine' (n-1) (not b) set
+        (hist', set) <- applyRules [(inr, rule) 
+                                  | (inr, outr, rule) <-rules
+                                  , b || outr <= 1] 
+                                  classes hist set
+        ruleEngine' (n-1) (not b) (if b then hist' else hist) set
 
     reCheckMask :: Set BitMask -> Opt (Set BitMask)
     reCheckMask set = do
