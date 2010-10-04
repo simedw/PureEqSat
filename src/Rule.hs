@@ -33,15 +33,6 @@ instance Show Pattern where
 
 data Rule = Rule Pattern Pattern
 
--- Pair where only the first componoent is used for the Ord instance
-data P x y = P x y
-
-instance Ord x => Ord (P x y) where
-    compare (P x _) (P x' _) = compare x x'
-
-instance Eq x => Eq (P x y) where
-    P x _ == P x' _ = x == x'
-
 (~>) = Rule
 infix 0 ~>
 forall3 f = f (PAny 1) (PAny 2) (PAny 3)
@@ -283,7 +274,18 @@ mergeDones :: Dones -> Dones -> Opt Dones
 mergeDones d1 d2 = return (d1 ++ d2)
 
 mergeChecks :: ToCheck -> ToCheck -> Opt ToCheck
-mergeChecks t1 t2 = return (t1 ++ t2)
+mergeChecks t1 [] = return t1
+mergeChecks t1 ((e,c):ts) = do
+    t1' <- insertToCheck e c t1
+    mergeChecks t1' ts
+
+insertToCheck :: EqRepr -> Checks -> ToCheck -> Opt ToCheck
+insertToCheck e c []  = return $ (e,c) : []
+insertToCheck e c ((e', c'):tc) = do
+    b <- equivalent e e'
+    if b
+        then return $ (e', c ++ c') : tc
+        else liftM ((e', c') :) $ insertToCheck e c tc
 
 getToCheck :: ToCheck -> Opt (Maybe (EqRepr, Checks, ToCheck))
 getToCheck [] = return Nothing

@@ -6,10 +6,13 @@ module Expr where
 import Opt hiding (EqRepr)
 import qualified Opt as Opt
 import Debug.Trace
+import Data.Function
 import Data.Maybe
-import Data.List (groupBy,sort)
+import Data.List (groupBy,sort, unionBy)
 import Control.Monad
 
+import Data.Set (Set)
+import qualified Data.Set as S
 
 data Atom
     = LInteger Integer
@@ -100,6 +103,15 @@ type EqRepr = Opt.EqRepr EqExpr
 
 type Opt = OptMonad EqExpr
 
+-- Pair where only the first componoent is used for the Ord instance
+data P x y = P x y
+
+instance Ord x => Ord (P x y) where
+    compare (P x _) (P x' _) = compare x x'
+
+instance Eq x => Eq (P x y) where
+    P x _ == P x' _ = x == x'
+
 -- | add a new term, if the term already exists we will return that term.
 addTerm :: EqExpr -> Opt EqRepr
 addTerm t = do
@@ -112,14 +124,18 @@ getTermDep :: EqExpr -> Opt [EqRepr]
 getTermDep term = case unEqExpr term of
     Atom _ -> getClasses
     Bin _ x y  -> do
-        l <- getDependOnMe x
-        r <- getDependOnMe y
-        nubClasses (l ++ r)
+        l <- mappis =<< getDependOnMe x
+        r <- mappis =<< getDependOnMe y
+        back $ uni l r
     Tri _ x y z -> do
-        l <- getDependOnMe x
-        c <- getDependOnMe y
-        r <- getDependOnMe z
-        nubClasses (l ++ c ++ r) 
+        l <- mappis =<< getDependOnMe x
+        c <- mappis =<< getDependOnMe y
+        r <- mappis =<< getDependOnMe z
+        back $ uni (uni l c) r
+  where
+    uni = S.intersection
+    back = return . map (\(P x y) -> y) . S.toList
+    mappis = liftM S.fromList . mapM (\x -> getPtr x >>= return . flip P x)
 
 getClassOpt :: EqExpr -> Opt [EqRepr]
 getClassOpt term = do

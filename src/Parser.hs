@@ -1,6 +1,6 @@
 module Parser where
 
-import Expr
+import Expr hiding (P)
 
 
 import Text.ParserCombinators.Parsec
