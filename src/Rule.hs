@@ -1,5 +1,4 @@
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE PackageImports #-}
 module Rule where
 
 import Expr
@@ -9,7 +8,7 @@ import Debug.Trace
 import Data.Maybe
 import Data.List (groupBy,sort, sortBy)
 import Control.Monad
-import "mtl" Control.Monad.Trans
+import Control.Monad.Trans
 import Data.List (zipWith4)
 import Data.Either
 import Data.Function

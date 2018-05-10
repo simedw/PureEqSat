@@ -1,4 +1,3 @@
-{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE TypeFamilies #-}
 module TestExpr where
 
@@ -16,7 +15,7 @@ import Data.IORef
 import Data.IOStableRef
 import qualified Data.Set as S
 
-import "mtl" Control.Monad.State
+import Control.Monad.State
 
 import qualified Data.Map as M
 

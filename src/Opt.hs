@@ -1,4 +1,3 @@
-{-# LANGUAGE PackageImports #-}
 module Opt 
     ( OptMonad    -- :: * -> * -> *
     , D.EqRepr    -- :: * -> *
@@ -22,7 +21,7 @@ module Opt
 import Data.Foldable (toList)
 import qualified IOSetA as D -- för att kunna ha samma namn fast lifted
 import Control.Monad
-import "mtl" Control.Monad.State.Strict
+import Control.Monad.State.Strict
 import qualified Data.Map as M
 import qualified Data.Set as S
 
