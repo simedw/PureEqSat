@@ -1,12 +1,11 @@
 module Data.IOStableRef
-  ( 
-	IOStableRef,		-- abstract, instance of: Eq, Ord, Typeable
-	newIOStableRef,		-- :: a -> IO (IOStableRef a)
-        readIOStableRef,	-- :: IOStableRef a -> IO a
-        writeIOStableRef,	-- :: IOStableRef a -> a -> IO ()
-	modifyIOStableRef,	-- :: IOStableRef a -> (a -> a) -> IO ()
-	hashIOStableRef,	-- :: IOStableRef a -> Int
-	) where
+  ( IOStableRef       -- abstract, instance of: Eq, Ord, Typeable
+  , newIOStableRef    -- :: a -> IO (IOStableRef a)
+  , readIOStableRef   -- :: IOStableRef a -> IO a
+  , writeIOStableRef  -- :: IOStableRef a -> a -> IO ()
+  , modifyIOStableRef -- :: IOStableRef a -> (a -> a) -> IO ()
+  , hashIOStableRef   -- :: IOStableRef a -> Int
+  ) where
 
 import Prelude
 import Data.IORef

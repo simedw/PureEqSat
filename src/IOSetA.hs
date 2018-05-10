@@ -1,10 +1,9 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE PackageImports #-}
 
 module IOSetA where
 
 import Control.Monad
-import "mtl" Control.Monad.State.Strict
+import Control.Monad.State.Strict
 
 import Data.IOStableRef
 import Data.Maybe (listToMaybe)
@@ -13,7 +12,7 @@ import Data.Set (Set)
 import Test.QuickCheck
 
 newtype IOSet s a = IS { runLS :: StateT (IState s) IO a }
-    deriving (MonadState (IState s), Monad, MonadIO, Functor)
+    deriving (MonadState (IState s), Monad, MonadIO, Applicative, Functor)
 
 data IState s = IState
     { classes :: [EqRepr s] -- Only pointers to Root elems!
@@ -285,4 +284,4 @@ runTest = do
     quickCheck prop_union
 
 instance Testable b => Testable (IOSet a b) where
-   property b = property $ runEqClass b 
+  property b = ioProperty $ runEqClass b
